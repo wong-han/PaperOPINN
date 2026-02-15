@@ -496,33 +496,44 @@ def plot_value():
     fxu_lqr = dynamics(X_grid_torch, u_star_lqr)
     V_dot_lqr = (gradV_lqr * fxu_lqr).sum(dim=1).reshape(X1.shape).detach().numpy()
 
-    # 绘制对比曲面在同一张图上
+    # 绘制对比曲面在同一张图上（颜色与 p3 协态图一致：OCNet=Purples, Optimal=Oranges）
     from mpl_toolkits.mplot3d import Axes3D
     import matplotlib.gridspec as gridspec
+    from matplotlib.lines import Line2D
+
+    model_cmaps = ["Purples", "Oranges"]
+    model_colors = [plt.cm.Purples(0.7), plt.cm.Oranges(0.7)]
+    model_alphas = [0.8, 0.3]
 
     fig = plt.figure(figsize=(16, 6))
     gs = gridspec.GridSpec(1, 2, width_ratios=[2, 1.4])
     ax = fig.add_subplot(gs[0], projection='3d')
 
-    # 使用单色渐变: HNN用Blues, LQR用Oranges
-    surf1 = ax.plot_surface(
-        X1, X2, hnn_values, cmap='Blues', alpha=0.85, linewidth=0, antialiased=True, rstride=1, cstride=1
+    # V 与 V_dot：OCNet 用 Purples，Optimal 用 Oranges，edgecolor='none'、alpha=1 与 p3 一致
+    ax.plot_surface(
+        X1, X2, hnn_values,
+        cmap=model_cmaps[0], edgecolor='none', alpha=model_alphas[0],
+        rstride=1, cstride=1, linewidth=0, antialiased=True
     )
-    surf1_1 = ax.plot_surface(
-        X1, X2, V_dot_hnn, cmap='Blues', alpha=0.85, linewidth=0, antialiased=True, rstride=1, cstride=1
+    ax.plot_surface(
+        X1, X2, V_dot_hnn,
+        cmap=model_cmaps[0], edgecolor='none', alpha=model_alphas[0],
+        rstride=1, cstride=1, linewidth=0, antialiased=True
     )
-    surf2 = ax.plot_surface(
-        X1, X2, lqr_values, cmap='Oranges', alpha=0.55, linewidth=0, antialiased=True, rstride=1, cstride=1
+    ax.plot_surface(
+        X1, X2, lqr_values,
+        cmap=model_cmaps[1], edgecolor='none', alpha=model_alphas[1],
+        rstride=1, cstride=1, linewidth=0, antialiased=True
     )
-    surf2_1 = ax.plot_surface(
-        X1, X2, V_dot_lqr, cmap='Oranges', alpha=0.55, linewidth=0, antialiased=True, rstride=1, cstride=1
+    ax.plot_surface(
+        X1, X2, V_dot_lqr,
+        cmap=model_cmaps[1], edgecolor='none', alpha=model_alphas[1],
+        rstride=1, cstride=1, linewidth=0, antialiased=True
     )
 
-    # 手动添加图例，颜色与曲面一致
-    from matplotlib.lines import Line2D
     legend_elements = [
-        Line2D([0], [0], color=plt.cm.Blues(0.7), lw=2, label='OCNet'),
-        Line2D([0], [0], color=plt.cm.Oranges(0.7), lw=2, label='Optimal')
+        Line2D([0], [0], color=model_colors[0], lw=2, label='OCNet'),
+        Line2D([0], [0], color=model_colors[1], lw=2, label='Optimal')
     ]
     ax.legend(handles=legend_elements, ncol=2, loc='upper right')
 
@@ -588,45 +599,95 @@ def plot_value():
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
 
-    # 画V_dot的等高线图（投影到最低面z=min）
-    fig3 = plt.figure(figsize=(6,5))
+    # 画 V：OCNet 与 OPTIMAL (V = x^T P x) 双曲面，底部等高线为两者误差（与 p3 一致）
+    err_V = np.abs(hnn_values - lqr_values)
+    # 误差等高线/colorbar 的显示范围：按需设置，例如 vmax_err=5.0 则 5.0 对应红色
+    vmin_err, vmax_err = 0.0, 1.0
+
+    fig3 = plt.figure(figsize=(6, 5))
     ax3 = fig3.add_subplot(111, projection='3d')
-    # 找到等高线投影的最低z面
-    z_min = min(np.min(hnn_values), np.min(hnn_values))
-    # 主表面
+    # OCNet 与 OPTIMAL 曲面，p3 配色
     ax3.plot_surface(
-        X1, X2, hnn_values, cmap='RdBu_r', alpha=0.8
+        X1, X2, hnn_values,
+        cmap=model_cmaps[0], edgecolor='none', alpha=model_alphas[0],
+        rstride=1, cstride=1, linewidth=0, antialiased=True
     )
-    # 在z=z_min做等高线投影
-    surf3_1 = ax3.contour(
-        X1, X2, hnn_values, zdir='z', offset=z_min, cmap='RdBu_r', alpha=1, levels=20
+    ax3.plot_surface(
+        X1, X2, lqr_values,
+        cmap=model_cmaps[1], edgecolor='none', alpha=model_alphas[1],
+        rstride=1, cstride=1, linewidth=0, antialiased=True
+    )
+    z_min = ax3.get_zlim()[0]
+    error_cf_V = ax3.contourf(
+        X1, X2, err_V, levels=10, cmap='RdBu_r', vmin=vmin_err, vmax=vmax_err,
+        zdir='z', offset=z_min
     )
     ax3.set_xlabel(r'$x_1$', labelpad=10)
     ax3.set_ylabel(r'$x_2$', labelpad=10)
     ax3.set_zlabel(r'$V$', labelpad=10, rotation=90)
-    # ax3.view_init(elev=5, azim=30, roll=0)
     filename = "image/" + args.filename_prefix + "hnn_value.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # 画V的等高线图（投影到最低面z=min）
-    fig4 = plt.figure(figsize=(6,5))
-    ax4 = fig4.add_subplot(111, projection='3d')
-    # 找到等高线投影的最低z面
-    z_min = min(np.min(V_dot_hnn), np.min(V_dot_hnn))
-    # 主表面
-    ax4.plot_surface(
-        X1, X2, V_dot_hnn, cmap='RdBu_r', alpha=0.8
+    # 单独保存 V 误差的 colorbar，范围与 vmin_err/vmax_err 一致（例如 vmax=5 则 5 为红色）
+    import matplotlib.colors as mcolors
+    import matplotlib.cm as cm
+    norm_err = mcolors.Normalize(vmin=vmin_err, vmax=vmax_err)
+    sm_err = cm.ScalarMappable(cmap='RdBu_r', norm=norm_err)
+    sm_err.set_array([])
+    fig_cbar_V = plt.figure(figsize=(5, 5))
+    ax_cbar = fig_cbar_V.add_subplot(111)
+    ax_cbar.axis('off')  # 去掉坐标轴
+    cbar = fig_cbar_V.colorbar(
+        sm_err, ax=ax_cbar, orientation='vertical',
+        fraction=0.05, pad=0.02, location='right'
     )
-    # 在z=z_min做等高线投影
-    surf4_1 = ax4.contour(
-        X1, X2, V_dot_hnn, zdir='z', offset=z_min, cmap='RdBu_r', alpha=1, levels=20
+    # 刻度按设定范围显示（vmin_err ~ vmax_err）
+    cbar.set_ticks(np.linspace(vmin_err, vmax_err, 6))
+    filename_cbar = "image/" + args.filename_prefix + "value_error_colorbar.svg"
+    fig_cbar_V.savefig(filename_cbar, dpi=600, bbox_inches='tight', pad_inches=0.5)
+
+    # 画 V_dot：OCNet 与 OPTIMAL 双曲面，底部等高线为两者误差（与 V 图同样方式）
+    # 最优 V_dot = (2Px)^T f(x, u*_lqr)，前面已算 V_dot_lqr
+    err_V_dot = np.abs(V_dot_hnn - V_dot_lqr)
+    vmin_err_dot, vmax_err_dot = 0.0, 20  # V_dot 误差 colorbar 显示范围，按需修改
+
+    fig4 = plt.figure(figsize=(6, 5))
+    ax4 = fig4.add_subplot(111, projection='3d')
+    ax4.plot_surface(
+        X1, X2, V_dot_hnn,
+        cmap=model_cmaps[0], edgecolor='none', alpha=model_alphas[0],
+        rstride=1, cstride=1, linewidth=0, antialiased=True
+    )
+    ax4.plot_surface(
+        X1, X2, V_dot_lqr,
+        cmap=model_cmaps[1], edgecolor='none', alpha=model_alphas[1],
+        rstride=1, cstride=1, linewidth=0, antialiased=True
+    )
+    z_min = ax4.get_zlim()[0]
+    error_cf_Vdot = ax4.contourf(
+        X1, X2, err_V_dot, levels=10, cmap='RdBu_r', vmin=vmin_err_dot, vmax=vmax_err_dot,
+        zdir='z', offset=z_min
     )
     ax4.set_xlabel(r'$x_1$', labelpad=10)
     ax4.set_ylabel(r'$x_2$', labelpad=10)
     ax4.set_zlabel(r'$\dot V$', labelpad=20)
-    # ax4.view_init(elev=5, azim=30, roll=0)
     filename = "image/" + args.filename_prefix + "hnn_value_dot.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
+
+    # 单独保存 V_dot 误差的 colorbar
+    norm_err_dot = mcolors.Normalize(vmin=vmin_err_dot, vmax=vmax_err_dot)
+    sm_err_dot = cm.ScalarMappable(cmap='RdBu_r', norm=norm_err_dot)
+    sm_err_dot.set_array([])
+    fig_cbar_Vdot = plt.figure(figsize=(5, 5))
+    ax_cbar_dot = fig_cbar_Vdot.add_subplot(111)
+    ax_cbar_dot.axis('off')  # 去掉坐标轴
+    cbar_dot = fig_cbar_Vdot.colorbar(
+        sm_err_dot, ax=ax_cbar_dot, orientation='vertical',
+        fraction=0.05, pad=0.02, location='right'
+    )
+    cbar_dot.set_ticks(np.linspace(vmin_err_dot, vmax_err_dot, 6))
+    filename_cbar_dot = "image/" + args.filename_prefix + "value_dot_error_colorbar.svg"
+    fig_cbar_Vdot.savefig(filename_cbar_dot, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
     # 画相轨迹图
     fig5 = plt.figure(figsize=(6,5))
@@ -721,6 +782,6 @@ def simulate_once():
 
 if __name__ == "__main__":
     args = Args()
-    train_hnn()
+    # train_hnn()
     plot_value()
-    simulate_once()
+    # simulate_once()

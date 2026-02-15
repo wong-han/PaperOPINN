@@ -853,7 +853,7 @@ def monte_carlo_simulation():
 
 if __name__ == "__main__":
     args = Args()
-    train_hnn()
+    # train_hnn()
     plot_value()
     plot_lambda()
-    monte_carlo_simulation()
+    # monte_carlo_simulation()

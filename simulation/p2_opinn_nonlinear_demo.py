@@ -370,71 +370,68 @@ def plot_value():
         hnn_values = hnn.get_value(X_tensor).cpu().numpy()
     hnn_values = hnn_values.reshape(X1.shape)
 
-    # 计算HNN的 V_dot
-    # 先关闭梯度的重新分配，重新分配给 X_tensor
-    X_tensor.requires_grad = True
+    # 计算HNN的 V_dot；最优控制 u* = -0.5 * g^T * pVpx，其中 g = [0, cos(2*x1)+2]
+    X_tensor.requires_grad_(True)
     V = hnn.get_value(X_tensor)
     V_sum = V.sum()
     pVpx = torch.autograd.grad(V_sum, X_tensor, create_graph=False)[0]  # (N, 2)
-
-    # 闭环控制器 u* = -R^{-1}B^T Lambda，R=1, B=[0, 1]^T
+    x1 = X_tensor[:, 0:1]  # (N, 1)
+    g2 = torch.cos(2 * x1) + 2  # (N, 1)
+    u_star = -0.5 * g2 * pVpx[:, 1:2]  # (N, 1)，u* = -0.5 * g^T pVpx
     with torch.no_grad():
-        Lambda = hnn.get_lambda(X_tensor).cpu().numpy()  # (N,2)
-    B = torch.tensor([[0.0], [1.0]], dtype=X_tensor.dtype)
-    R = torch.tensor([[1.0]], dtype=X_tensor.dtype)
-    Lambda_tensor = hnn.get_lambda(X_tensor)
-    u_star = -torch.matmul(Lambda_tensor, B)  # (N,1)
-    with torch.no_grad():
-        # dynamics 用原始 X_tensor + u_star
         fxu = dynamics(X_tensor, u_star)
     V_dot_hnn = (pVpx * fxu).sum(dim=1).reshape(X1.shape).detach().numpy()
 
-    # LQR值函数: V(x) = x^T P x, 其中P=[[0.5, 0],[0, 1]]
+    # 最优值函数 V(x) = x^T P x；最优 Lambda = 2Px；最优控制 u* = -0.5 * g^T * (2Px)
     P = np.array([[0.5, 0.0], [0.0, 1.0]])
-    lqr_values = np.einsum('ij,jk,ik->i', X_grid, P, X_grid).reshape(X1.shape)
+    opt_values = np.einsum('ij,jk,ik->i', X_grid, P, X_grid).reshape(X1.shape)
 
-    # LQR的V_dot
     X_grid_torch = torch.from_numpy(X_grid).float()
     P_torch = torch.from_numpy(P).float()
-    B_lqr = torch.tensor([[0.0], [1.0]])
-    R_inv_lqr = torch.tensor([[1.0]])
-    gradV_lqr = 2 * torch.matmul(X_grid_torch, P_torch)  # (N,2)
-    u_star_lqr = -torch.matmul(gradV_lqr, B_lqr)  # (N,1)
-    # dynamics 兼容shape
+    gradV_opt = 2 * torch.matmul(X_grid_torch, P_torch)  # (N, 2)
+    x1_grid = X_grid_torch[:, 0:1]
+    g2_grid = torch.cos(2 * x1_grid) + 2
+    u_star_opt = -0.5 * g2_grid * gradV_opt[:, 1:2]  # (N, 1)
     with torch.no_grad():
-        fxu_lqr = dynamics(X_grid_torch, u_star_lqr)
-    V_dot_lqr = (gradV_lqr * fxu_lqr).sum(dim=1).reshape(X1.shape).detach().numpy()
+        fxu_opt = dynamics(X_grid_torch, u_star_opt)
+    V_dot_opt = (gradV_opt * fxu_opt).sum(dim=1).reshape(X1.shape).detach().numpy()
 
+    # 绘制对比曲面（与 p1 一致：OCNet=Purples, Optimal=Oranges）
     from mpl_toolkits.mplot3d import Axes3D
     import matplotlib.gridspec as gridspec
+    from matplotlib.lines import Line2D
+
+    model_cmaps = ["Purples", "Oranges"]
+    model_colors = [plt.cm.Purples(0.7), plt.cm.Oranges(0.7)]
+    model_alphas = [0.8, 0.3]
 
     fig = plt.figure(figsize=(16, 6))
     gs = gridspec.GridSpec(1, 2, width_ratios=[2, 1.4])
-
-    # ----------- 3D曲面图：值函数和V_dot ----------------
     ax = fig.add_subplot(gs[0], projection='3d')
 
-    surf1 = ax.plot_surface(
-        X1, X2, hnn_values, cmap='Blues', alpha=0.83, linewidth=0, antialiased=True, rstride=1, cstride=1
+    ax.plot_surface(
+        X1, X2, hnn_values,
+        cmap=model_cmaps[0], edgecolor='none', alpha=model_alphas[0],
+        rstride=1, cstride=1, linewidth=0, antialiased=True
     )
-    surf2 = ax.plot_surface(
-        X1, X2, lqr_values, cmap='Oranges', alpha=0.47, linewidth=0, antialiased=True, rstride=1, cstride=1
+    ax.plot_surface(
+        X1, X2, V_dot_hnn,
+        cmap=model_cmaps[0], edgecolor='none', alpha=model_alphas[0],
+        rstride=1, cstride=1, linewidth=0, antialiased=True
     )
-
-    # v_dot 曲面
-    surf3 = ax.plot_surface(
-        X1, X2, V_dot_hnn, cmap='Blues', alpha=0.46, linewidth=0, antialiased=True, rstride=1, cstride=1
+    ax.plot_surface(
+        X1, X2, opt_values,
+        cmap=model_cmaps[1], edgecolor='none', alpha=model_alphas[1],
+        rstride=1, cstride=1, linewidth=0, antialiased=True
     )
-
-    surf3 = ax.plot_surface(
-        X1, X2, V_dot_lqr, cmap='Oranges', alpha=0.46, linewidth=0, antialiased=True, rstride=1, cstride=1
+    ax.plot_surface(
+        X1, X2, V_dot_opt,
+        cmap=model_cmaps[1], edgecolor='none', alpha=model_alphas[1],
+        rstride=1, cstride=1, linewidth=0, antialiased=True
     )
-
-    # 手动添加图例
-    from matplotlib.lines import Line2D
     legend_elements = [
-        Line2D([0], [0], color=plt.cm.Blues(0.7), lw=2, label='OCNet'),
-        Line2D([0], [0], color=plt.cm.Oranges(0.7), lw=2, label='Optimal'),
+        Line2D([0], [0], color=model_colors[0], lw=2, label='OCNet'),
+        Line2D([0], [0], color=model_colors[1], lw=2, label='Optimal'),
     ]
     ax.legend(handles=legend_elements, ncol=2, loc='upper right')
     ax.set_xlabel(r'$x_1$', labelpad=10)
@@ -442,11 +439,10 @@ def plot_value():
     ax.set_zlabel(r'$V$ or $\dot V$', labelpad=10)
     ax.view_init(elev=10, azim=48, roll=0)
 
-    # ----------- 相空间流线图（相轨迹streamplot/quiver）----------------
+    # 相空间 quiver：使用正确 u* = -0.5 * (cos(2*x1)+2) * Lambda_2
     ax2 = fig.add_subplot(gs[1])
     ax2.set_xlim([-3.5, 3.2])
     ax2.set_ylim([-3.5, 3.2])
-    # 设置较粗网格
     x1_stream = np.linspace(-3, 3, 22)
     x2_stream = np.linspace(-3, 3, 22)
     Xs1, Xs2 = np.meshgrid(x1_stream, x2_stream)
@@ -459,24 +455,22 @@ def plot_value():
             x_tensor = torch.from_numpy(x_point).float().unsqueeze(0)
             with torch.no_grad():
                 Lambda = hnn.get_lambda(x_tensor).cpu().numpy().squeeze()
-            B_np = np.array([[0], [1]])
-            u = -B_np.T @ Lambda.reshape(-1, 1)
-            u = float(u.squeeze())
-            f_vec = dynamics(x_tensor, torch.tensor([[u]])).cpu().numpy().squeeze()
+            u = -0.5 * (np.cos(2 * x_point[0]) + 2) * Lambda[1]
+            u = float(u)
+            f_vec = dynamics(x_tensor, torch.tensor([[u]], dtype=torch.float32)).cpu().numpy().squeeze()
             U[i, j] = f_vec[0]
             Vv[i, j] = f_vec[1]
 
     speed = np.sqrt(U ** 2 + Vv ** 2)
-    color=speed
-    step = 2  # 每隔2个点取一次，提升稀疏度
+    color = speed
+    step = 2
     Q = ax2.quiver(
-        Xs1[::step, ::step], Xs2[::step, ::step], 
+        Xs1[::step, ::step], Xs2[::step, ::step],
         U[::step, ::step], Vv[::step, ::step], color[::step, ::step],
         cmap='plasma', angles='xy', scale=100, width=0.005
     )
     ax2.set_xlabel(r'$x_1$')
     ax2.set_ylabel(r'$x_2$')
-
     ax2.grid(True, linestyle='--', alpha=0.5)
     ax2.axis('equal')
     cb = plt.colorbar(Q, ax=ax2, fraction=0.045, pad=0.04)
@@ -485,54 +479,99 @@ def plot_value():
     filename = "image/" + args.filename_prefix + "value_function.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
+    # ----------- 画 V：OCNet 与 OPTIMAL (V = x^T P x) 双曲面，底部等高线为两者误差（与 p1 一致）-----------
+    import matplotlib.colors as mcolors
+    import matplotlib.cm as cm
 
-        # 画V_dot的等高线图（投影到最低面z=min）
-    fig3 = plt.figure(figsize=(6,5))
+    err_V = np.abs(hnn_values - opt_values)
+    vmin_err, vmax_err = 0.0, 1.0
+
+    fig3 = plt.figure(figsize=(6, 5))
     ax3 = fig3.add_subplot(111, projection='3d')
-    # 找到等高线投影的最低z面
-    z_min = min(np.min(hnn_values), np.min(hnn_values))
-    # 主表面
     ax3.plot_surface(
-        X1, X2, hnn_values, cmap='RdBu_r', alpha=0.8
+        X1, X2, hnn_values,
+        cmap=model_cmaps[0], edgecolor='none', alpha=model_alphas[0],
+        rstride=1, cstride=1, linewidth=0, antialiased=True
     )
-    # 在z=z_min做等高线投影
-    surf3_1 = ax3.contour(
-        X1, X2, hnn_values, zdir='z', offset=z_min, cmap='RdBu_r', alpha=1, levels=20
+    ax3.plot_surface(
+        X1, X2, opt_values,
+        cmap=model_cmaps[1], edgecolor='none', alpha=model_alphas[1],
+        rstride=1, cstride=1, linewidth=0, antialiased=True
+    )
+    z_min = ax3.get_zlim()[0]
+    error_cf_V = ax3.contourf(
+        X1, X2, err_V, levels=10, cmap='RdBu_r', vmin=vmin_err, vmax=vmax_err,
+        zdir='z', offset=z_min
     )
     ax3.set_xlabel(r'$x_1$', labelpad=10)
     ax3.set_ylabel(r'$x_2$', labelpad=10)
     ax3.set_zlabel(r'$V$', labelpad=10, rotation=90)
-    # ax3.view_init(elev=5, azim=30, roll=0)
     filename = "image/" + args.filename_prefix + "hnn_value.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # 画V的等高线图（投影到最低面z=min）
-    fig4 = plt.figure(figsize=(6,5))
-    ax4 = fig4.add_subplot(111, projection='3d')
-    # 找到等高线投影的最低z面
-    z_min = min(np.min(V_dot_hnn), np.min(V_dot_hnn))
-    # 主表面
-    ax4.plot_surface(
-        X1, X2, V_dot_hnn, cmap='RdBu_r', alpha=0.8
+    # 单独保存 V 误差的 colorbar
+    norm_err = mcolors.Normalize(vmin=vmin_err, vmax=vmax_err)
+    sm_err = cm.ScalarMappable(cmap='RdBu_r', norm=norm_err)
+    sm_err.set_array([])
+    fig_cbar_V = plt.figure(figsize=(5, 5))
+    ax_cbar = fig_cbar_V.add_subplot(111)
+    ax_cbar.axis('off')
+    cbar = fig_cbar_V.colorbar(
+        sm_err, ax=ax_cbar, orientation='vertical',
+        fraction=0.05, pad=0.02, location='right'
     )
-    # 在z=z_min做等高线投影
-    surf4_1 = ax4.contour(
-        X1, X2, V_dot_hnn, zdir='z', offset=z_min, cmap='RdBu_r', alpha=1, levels=20
+    cbar.set_ticks(np.linspace(vmin_err, vmax_err, 6))
+    filename_cbar = "image/" + args.filename_prefix + "value_error_colorbar.svg"
+    fig_cbar_V.savefig(filename_cbar, dpi=600, bbox_inches='tight', pad_inches=0.5)
+
+    # ----------- 画 V_dot：OCNet 与 OPTIMAL 双曲面，底部等高线为两者误差（与 p1 一致）-----------
+    err_V_dot = np.abs(V_dot_hnn - V_dot_opt)
+    vmin_err_dot, vmax_err_dot = 0.0, 10
+
+    fig4 = plt.figure(figsize=(6, 5))
+    ax4 = fig4.add_subplot(111, projection='3d')
+    ax4.plot_surface(
+        X1, X2, V_dot_hnn,
+        cmap=model_cmaps[0], edgecolor='none', alpha=model_alphas[0],
+        rstride=1, cstride=1, linewidth=0, antialiased=True
+    )
+    ax4.plot_surface(
+        X1, X2, V_dot_opt,
+        cmap=model_cmaps[1], edgecolor='none', alpha=model_alphas[1],
+        rstride=1, cstride=1, linewidth=0, antialiased=True
+    )
+    z_min = ax4.get_zlim()[0]
+    error_cf_Vdot = ax4.contourf(
+        X1, X2, err_V_dot, levels=10, cmap='RdBu_r', vmin=vmin_err_dot, vmax=vmax_err_dot,
+        zdir='z', offset=z_min
     )
     ax4.set_xlabel(r'$x_1$', labelpad=10)
     ax4.set_ylabel(r'$x_2$', labelpad=10)
     ax4.set_zlabel(r'$\dot V$', labelpad=20)
-    # ax4.view_init(elev=5, azim=30, roll=0)
     filename = "image/" + args.filename_prefix + "hnn_value_dot.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
+    # 单独保存 V_dot 误差的 colorbar
+    norm_err_dot = mcolors.Normalize(vmin=vmin_err_dot, vmax=vmax_err_dot)
+    sm_err_dot = cm.ScalarMappable(cmap='RdBu_r', norm=norm_err_dot)
+    sm_err_dot.set_array([])
+    fig_cbar_Vdot = plt.figure(figsize=(5, 5))
+    ax_cbar_dot = fig_cbar_Vdot.add_subplot(111)
+    ax_cbar_dot.axis('off')
+    cbar_dot = fig_cbar_Vdot.colorbar(
+        sm_err_dot, ax=ax_cbar_dot, orientation='vertical',
+        fraction=0.05, pad=0.02, location='right'
+    )
+    cbar_dot.set_ticks(np.linspace(vmin_err_dot, vmax_err_dot, 6))
+    filename_cbar_dot = "image/" + args.filename_prefix + "value_dot_error_colorbar.svg"
+    fig_cbar_Vdot.savefig(filename_cbar_dot, dpi=600, bbox_inches='tight', pad_inches=0.5)
+
     # 画相轨迹图
-    fig5 = plt.figure(figsize=(6,5))
+    fig5 = plt.figure(figsize=(6, 5))
     ax5 = fig5.add_subplot(111)
-    # 在z=z_min做等高线投影
-    step = 2  # 每隔2个点取一次，提升稀疏度
+    step = 2
     Q = ax5.quiver(
-        Xs1[::step, ::step], Xs2[::step, ::step], 
+        Xs1[::step, ::step], Xs2[::step, ::step],
         U[::step, ::step], Vv[::step, ::step], color[::step, ::step],
         cmap='RdBu_r', angles='xy', scale=100, width=0.005
     )
@@ -660,4 +699,4 @@ if __name__ == "__main__":
     args = Args()
     # train_hnn()
     plot_value()
-    simulate_once()
+    # simulate_once()

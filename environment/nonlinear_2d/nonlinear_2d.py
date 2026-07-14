@@ -20,13 +20,13 @@ class Nonlinear2D(gym.Env):
     metadata['Q'] = np.diag([1, 1])
     metadata['R'] = np.diag([1])
 
-    def __init__(self, options={}, theoretic_mode=False):
+    def __init__(self, options={}, theoretic_mode=False, rl_mode=False):
         super().__init__()
         
         # 模型设置
         self.acados_model = NonmialAcadosModel(self.metadata)
         self.system_torch_dynamics = SystemTorchDynamics(self.metadata)
-        self.observation_space = spaces.Box(low=-5.0, high=5.0, shape=(self.metadata['nx'],), dtype=np.float64)
+        self.observation_space = spaces.Box(low=-10.0, high=10.0, shape=(self.metadata['nx'],), dtype=np.float64)
         self.action_space = spaces.Box(low=-10, high=10, shape=(self.metadata['nu'],), dtype=np.float64)
 
         # 在observation_space范围内随机生成一个状态
@@ -76,6 +76,7 @@ class Nonlinear2D(gym.Env):
         self.data = {}
         self.T = 10.0  # 最大运行时间
         self.theoretic_mode = theoretic_mode
+        self.rl_mode = rl_mode
 
         # 扰动设置
         self.has_disturbed = False
@@ -94,11 +95,24 @@ class Nonlinear2D(gym.Env):
         info['data'] = deepcopy(self.data)
         return info
 
-    def reset(self, seed=None, options={}):
+    def reset(self, seed=None, options={}, rl_mode=False):
+        self.rl_mode = rl_mode
         super().reset(seed=seed)
-        self.state = 0.6 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
+
+         # 初始状态
+        if options is not None:
+            init_state = options.get('init_state')
+        else:
+            init_state = None
+        if init_state is not None:
+            self.state = init_state
+        else:
+            if self.rl_mode:
+                self.state = 0.4 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
+            else:
+                self.state = 0.3 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
+
         self.t = 0.0
-        self.state = np.array([0.9, 2])
         self.data = {}
         # 模型参数（线性参数不再使用，保留兼容）
         if options is not None:
@@ -152,16 +166,20 @@ class Nonlinear2D(gym.Env):
         self.t = self.t + self.dt
         # 奖励函数（Q, R为单位阵）
         reward = -(self.state.T @ self.Q @ self.state + action.T @ self.R @ action) * self.dt + 10 * self.dt * (1 - self.theoretic_mode)
-        if np.all(np.abs(self.state) < np.array([0.01, 0.01])):
-            terminated = True
-            # terminated = False  # Do not terminate
-            reward += 100 * (1 - self.theoretic_mode)
+
+        if np.all(np.abs(self.state) < np.array([0.1, 0.1])):
+            state_norm = np.linalg.norm(self.state)
+            reward += 100 * (1 - self.theoretic_mode) + 100 * (1 - state_norm) * (1 - self.theoretic_mode)
+            if np.all(np.abs(self.state) < np.array([0.01, 0.01])):
+                terminated = True
+            else:
+                terminated = False
         else:
             terminated = False
         if not self.observation_space.contains(self.state):
             # print("crashed")
             crashed = True
-            reward -= 10 * (1 - self.theoretic_mode)
+            reward -= 100 * (1 - self.theoretic_mode)
             self.state = old_state
         else:
             crashed = False

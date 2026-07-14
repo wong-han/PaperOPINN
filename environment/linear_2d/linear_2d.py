@@ -29,7 +29,7 @@ class Linear2D(gym.Env):
         self.action_space = spaces.Box(low=-10.0, high=10.0, shape=(self.metadata['nu'],), dtype=np.float64)
 
         # 在observation_space范围内随机生成一个状态
-        self.state = 0.4 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
+        self.state = 0.6 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
 
         # 模型参数
         model_param = options.get('model_param')
@@ -102,7 +102,10 @@ class Linear2D(gym.Env):
         info['data'] = deepcopy(self.data)
         return info
 
-    def reset(self, seed=None, options={}):
+    def reset(self, seed=None, options={}, rl_mode=False):
+        # 仿真设置
+        self.rl_mode = rl_mode
+
         self.t = 0.0
         self.data = {}
         super().reset(seed=seed)
@@ -114,7 +117,7 @@ class Linear2D(gym.Env):
         if init_state is not None:
             self.state = init_state
         else:
-            self.state = 0.4 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
+            self.state = 0.7 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
         # 模型参数
         if options is not None:
             model_param = options.get('model_param')
@@ -173,10 +176,11 @@ class Linear2D(gym.Env):
             dxdt = self.A @ self.state + self.B @ action + self.disturbance()
             self.state = self.state + dxdt * self.dt
             # 奖励函数
-            reward = -(self.state.T @ self.Q @ self.state + action.T @ self.R @ action) * self.dt + 10 * self.dt
+            reward = -(self.state.T @ self.Q @ self.state + action.T @ self.R @ action) * self.dt + 1 * self.dt * self.rl_mode
             if np.all(np.abs(self.state) < np.array([0.01, 0.01])):
                 terminated = True
-                reward += 100
+                P = np.array([[np.sqrt(3), 1.0], [1.0, np.sqrt(3)]])
+                reward += 10 #- (self.state.T @ P @ self.state) * self.rl_mode
             else:
                 terminated = False
         else:
@@ -184,21 +188,23 @@ class Linear2D(gym.Env):
             self.state = self.state + dxdt * self.dt
             delta_state = self.state - self.state_d
             # 奖励函数
-            reward = -(delta_state @ self.Q @ delta_state + action @ self.R @ action) * self.dt + 10 * self.dt
+            reward = -(delta_state @ self.Q @ delta_state + action @ self.R @ action) * self.dt + 10 * self.dt * self.rl_mode
             if np.all(np.abs(delta_state) < np.array([0.01, 0.01])):
                 terminated = True
-                reward += 100
+                reward += 100 * self.rl_mode
             else:
                 terminated = False
         if not self.observation_space.contains(self.state):
             # print("crashed")
             crashed = True
-            reward -= 10
+            reward -= 10 * self.rl_mode
             self.state = old_state
         else:
             crashed = False
         if self.t > self.T:
             truncated = True
+            # P = np.array([[np.sqrt(3), 1.0], [1.0, np.sqrt(3)]])
+            # reward +=  - (self.state.T @ P @ self.state) * self.rl_mode
         else:
             truncated = False
         # 信息

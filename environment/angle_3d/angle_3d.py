@@ -24,7 +24,7 @@ class Angle3D(gym.Env):
         self.action_space = spaces.Box(low=-5.0, high=5.0, shape=(self.metadata['nu'],), dtype=np.float64)
 
         # 在observation_space范围内随机生成一个状态
-        self.state = 0.9 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
+        self.state = 0.666 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
 
         # 控制参数（仍然使用单位阵，或按外部传入）
         control_param = options.get('control_param')
@@ -98,10 +98,13 @@ class Angle3D(gym.Env):
         self.t = self.t + self.dt
         # 奖励函数（Q, R为单位阵）
         reward = -(self.state.T @ self.Q @ self.state + action.T @ self.R @ action) * self.dt + 10 * self.dt * (1 - self.theoretic_mode)
-        if np.all(np.abs(self.state) < np.array([0.01, 0.01, 0.01])):
-            terminated = True
-            # terminated = False  # Do not terminate
-            reward += 100 * (1 - self.theoretic_mode)
+        if np.all(np.abs(self.state) < np.array([0.1, 0.1, 0.1])):
+            state_norm = np.linalg.norm(self.state)
+            reward += 10 * (1 - self.theoretic_mode) + 10 * (1 - state_norm) * (1 - self.theoretic_mode)
+            if np.all(np.abs(self.state) < np.array([0.01, 0.01, 0.01])):
+                terminated = True
+            else:
+                terminated = False
         else:
             terminated = False
         if not self.observation_space.contains(self.state):

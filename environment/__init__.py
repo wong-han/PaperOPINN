@@ -47,6 +47,11 @@ register(
 )
 
 register(
+    id="quadrotor3d_TR_constrained",
+    entry_point="environment.quadrotor3d_TR_constrained:Quadrotor3D_TR",
+)
+
+register(
     id="custom_pendulum-v0",
     entry_point="environment.custom_pendulum:Pendulum",
 )

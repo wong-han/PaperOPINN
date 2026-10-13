@@ -12,7 +12,7 @@ import matplotlib as mpl
 import gymnasium as gym
 import casadi as ca
 
-# ================== 图像设置 =======================
+# Plot settings
 mpl.rcParams['font.family'] = 'Times New Roman'
 mpl.rcParams['text.usetex'] = False
 mpl.rcParams['axes.unicode_minus'] = False
@@ -75,7 +75,7 @@ def train_sp():
     print("--- Training Network using Theoretical Optimal Control ---")
 
     for step in range(Args.time_steps):
-        # 采样数据
+        # Sample training data
         low = -4.0
         high = 4.0
         x_batch = np.random.uniform(low, high, (Args.batch_size, 2)).astype(np.float32)
@@ -164,7 +164,7 @@ def plot_value():
     fxu_x2 = fxu_grid[:, 1].reshape(X1.shape)
     V_dot_sp = dV_dx1 * fxu_x1 + dV_dx2 * fxu_x2
 
-    # ------------------ 计算 Optimal 值函数作为参考 ------------------
+
     P = np.array([[0.5, 0.0], [0.0, 1.0]])
     opt_values = np.einsum('ij,jk,ik->i', X_grid, P, X_grid).reshape(X1.shape)
     
@@ -236,7 +236,7 @@ def plot_value():
     filename = "image/" + args.filename_prefix + "value_function.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # 画V的等高线图
+    # Plot value-function contours
     fig3 = plt.figure(figsize=(6,5))
     ax3 = fig3.add_subplot(111, projection='3d')
     z_min = min(np.min(sp_values), np.min(sp_values))
@@ -248,7 +248,7 @@ def plot_value():
     filename = "image/" + args.filename_prefix + "sp_value.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # 画V_dot的等高线图
+    # Plot value-derivative contours
     fig4 = plt.figure(figsize=(6,5))
     ax4 = fig4.add_subplot(111, projection='3d')
     z_min = min(np.min(V_dot_sp), np.min(V_dot_sp))
@@ -260,7 +260,7 @@ def plot_value():
     filename = "image/" + args.filename_prefix + "sp_value_dot.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # 单独画相轨迹图
+    # Plot the phase portrait
     fig5 = plt.figure(figsize=(6,5))
     ax5 = fig5.add_subplot(111)
     Q_quiver2 = ax5.quiver(
@@ -276,7 +276,7 @@ def plot_value():
     filename = "image/" + args.filename_prefix + "quiver.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # 单独画控制量曲面对比
+
     u_sp_surface = u_grid.cpu().numpy().reshape(X1.shape)
     u_opt_surface = u_star_opt.cpu().numpy().reshape(X1.shape)
     

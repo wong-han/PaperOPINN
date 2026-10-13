@@ -38,55 +38,55 @@ def eval_policy(agent, env_id, num_episodes=5):
         eval_env.close()
     return total_return / num_episodes
     
-# ================== 图像设置 =======================
-mpl.rcParams['font.family'] = 'Times New Roman'  # 默认字体
-# mpl.rcParams['font.weight'] = 'bold'  # 加粗
-mpl.rcParams['text.usetex'] = True  # 是否使用tex渲染
-mpl.rcParams['axes.unicode_minus'] = False  # 解决无法显示负号
-mpl.rcParams['xtick.direction'] = 'in'  # x轴刻度线朝内
-mpl.rcParams['ytick.direction'] = 'in'  # y轴刻度线朝内
-mpl.rcParams['xtick.top'] = True  # 显示上方的坐标轴
-mpl.rcParams['ytick.right'] = True  # 显示右侧的坐标轴
 
-mpl.rcParams['legend.frameon'] = False  # legend不显示边框
-mpl.rcParams['legend.fontsize'] = 24  # legend默认size
+mpl.rcParams['font.family'] = 'Times New Roman'
 
-mpl.rcParams['xtick.labelsize'] = 24  # x坐标默认size
-mpl.rcParams['ytick.labelsize'] = 24  # y坐标默认size
-mpl.rcParams['axes.labelsize'] = 24  # 轴标题默认size
-mpl.rcParams['lines.linewidth'] = 2  # 线条宽度
+mpl.rcParams['text.usetex'] = True
+mpl.rcParams['axes.unicode_minus'] = False
+mpl.rcParams['xtick.direction'] = 'in'
+mpl.rcParams['ytick.direction'] = 'in'
+mpl.rcParams['xtick.top'] = True
+mpl.rcParams['ytick.right'] = True
+
+mpl.rcParams['legend.frameon'] = False
+mpl.rcParams['legend.fontsize'] = 24
+
+mpl.rcParams['xtick.labelsize'] = 24
+mpl.rcParams['ytick.labelsize'] = 24
+mpl.rcParams['axes.labelsize'] = 24
+mpl.rcParams['lines.linewidth'] = 2
 mpl.rcParams['axes.grid'] = True
-mpl.rcParams['grid.linestyle'] = '--'  # 虚线
-mpl.rcParams['grid.alpha'] = 0.5       # 透明度
-mpl.rcParams['grid.color'] = 'gray'    # 网格颜色
+mpl.rcParams['grid.linestyle'] = '--'
+mpl.rcParams['grid.alpha'] = 0.5
+mpl.rcParams['grid.color'] = 'gray'
 
-# =================== 参数设置 ======================
+
 class Args:
-    # 环境名称
+
     env_id = "environment:nonlinear2d-v0"
-    # 学习率
+
     learning_rate = 3e-4
-    # 总训练交互步数 (PPO需要较多数据)
+
     time_steps = 1000000
-    # 每次PPO更新的步数
+
     num_steps = 2000
-    # 训练批次
+
     batch_size = 64
-    # PPO的优化轮数
+
     ppo_epochs = 10
     reward_mode = "theoretic"
     seed = 0
     entropy_coef = 0.0
     reward_scale = 1.0
-    # clip参数
+
     clip_param = 0.2
-    # 折扣因子
+
     gamma = 0.99
     # GAE lambda
     gae_lambda = 0.95
-    # 是否使用GPU
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    # 文件名前缀
+
     filename_prefix = "rl_nonlinear2d_"
     return_window_episodes = 20
     model_filename = "rl_nonlinear2d_v1_reproduction.pth"
@@ -94,7 +94,7 @@ class Args:
     curve_filename = "rl_nonlinear2d_v1_reproduction_learning_curve.png"
 
 
-# 动力学相关 (用于测试和画图时的积分推演)
+
 def dynamics(X, U):
     x1 = X[:, 0:1]
     x2 = X[:, 1:2]
@@ -112,11 +112,11 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     return layer
 
 
-# ================== PPO 强化学习网络 ==================
+
 class RLNet(nn.Module):
     def __init__(self, state_dim, action_dim):
         super().__init__()
-        # Actor 网络：预测动作均值
+
         self.actor_mean = nn.Sequential(
             layer_init(nn.Linear(state_dim, 64)),
             nn.Tanh(),
@@ -124,10 +124,10 @@ class RLNet(nn.Module):
             nn.Tanh(),
             layer_init(nn.Linear(64, action_dim), std=0.01),
         )
-        # Actor 动作对数标准差：独立可学习参数
+
         self.actor_logstd = nn.Parameter(torch.zeros(1, action_dim))
         
-        # Critic 网络：预测状态价值
+
         self.critic = nn.Sequential(
             layer_init(nn.Linear(state_dim, 64)),
             nn.Tanh(),
@@ -149,11 +149,11 @@ class RLNet(nn.Module):
         return action, probs.log_prob(action).sum(1), probs.entropy().sum(1), self.critic(x)
 
     def get_action(self, x):
-        # 推理测试时，直接使用策略均值作为确定性动作
+
         return self.actor_mean(x)
 
 
-# ================== PPO 训练逻辑 ==================
+
 def train_rl():
     env = gym.make(Args.env_id, theoretic_mode=True)
     np.random.seed(Args.seed)
@@ -161,12 +161,12 @@ def train_rl():
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(Args.seed)
     state_dim = env.observation_space.shape[0]
-    action_dim = 1  # 针对当前线性的2D环境，控制量为1维
+    action_dim = 1
     
     agent = RLNet(state_dim, action_dim).to(Args.device)
     optimizer = optim.Adam(agent.parameters(), lr=Args.learning_rate, eps=1e-5)
     
-    # 初始化 rollout 缓冲区
+
     num_steps = Args.num_steps
     obs = torch.zeros((num_steps, state_dim)).to(Args.device)
     actions = torch.zeros((num_steps, action_dim)).to(Args.device)
@@ -201,7 +201,7 @@ def train_rl():
         #     print(f"Time limit of 30s reached at update {update}. Stopping training.")
         #     break
 
-        # 采集数据
+
         synchronize_device(Args.device)
         sampling_start = time.perf_counter()
         returns_completed_this_rollout = []
@@ -250,7 +250,7 @@ def train_rl():
         rollout_mean_returns.append(rollout_mean)
         rolling_mean_returns.append(rolling_mean)
                 
-        # 计算优势函数 (GAE)
+
         with torch.no_grad():
             next_value = agent.get_value(next_obs.unsqueeze(0)).reshape(1, -1)
             advantages = torch.zeros_like(rewards).to(Args.device)
@@ -266,7 +266,7 @@ def train_rl():
                 advantages[t] = lastgaelam = delta + Args.gamma * Args.gae_lambda * nextnonterminal * lastgaelam
             returns = advantages + values
 
-        # 准备小批量训练数据
+
         b_obs = obs.reshape((-1, state_dim))
         b_logprobs = logprobs.reshape((-1,))
         b_actions = actions.reshape((-1, action_dim))
@@ -274,7 +274,7 @@ def train_rl():
         b_returns = returns.reshape((-1,))
         b_values = values.reshape((-1,))
 
-        # 开始进行 PPO 网络优化
+
         b_inds = np.arange(num_steps)
         for epoch in range(Args.ppo_epochs):
             np.random.shuffle(b_inds)
@@ -287,7 +287,7 @@ def train_rl():
                 ratio = logratio.exp()
 
                 mb_advantages = b_advantages[mb_inds]
-                # 归一化 Advantage
+
                 mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
 
                 # Policy Loss
@@ -313,7 +313,7 @@ def train_rl():
     total_seconds = time.perf_counter() - training_start
     training_seconds = max(0.0, total_seconds - sampling_seconds)
     env.close()
-    # 保存模型
+
     model_dir = "model"
     os.makedirs(model_dir, exist_ok=True)
     model_path = os.path.join(model_dir, Args.model_filename)
@@ -359,7 +359,7 @@ def train_rl():
     return record
 
 
-# ================== 在网格化场景下测试值函数与画图 ==================
+
 def plot_value():
     model_dir = "model"
     model_path = os.path.join(model_dir, Args.model_filename)
@@ -377,17 +377,17 @@ def plot_value():
         print(f"Model file {model_path} not found. Running with untrained model.")
     agent.eval()
 
-    # 构建网格
+
     x1 = np.linspace(-2.7, 2.7, 50)
     x2 = np.linspace(-2.7, 2.7, 50)
     X1, X2 = np.meshgrid(x1, x2)
     X_grid = np.stack([X1.ravel(), X2.ravel()], axis=1)
     X_tensor = torch.from_numpy(X_grid).float().to(Args.device)
 
-    # ------------------ 通过网格化测试获取 RL 值函数 ------------------
-    # 由于 RL 只输出了确定的动作，我们通过积分评估该策略的价值 V(x) = \int (x^TQx + u^TRu) dt
+
+
     dt = 0.05
-    T_steps = 400  # 仿真20秒
+    T_steps = 400
     V_rl = torch.zeros(X_tensor.shape[0], device=Args.device)
     V_next_rl = torch.zeros(X_tensor.shape[0], device=Args.device)
     curr_x = X_tensor.clone()
@@ -399,7 +399,7 @@ def plot_value():
     with torch.no_grad():
         for step in range(T_steps):
             u = agent.get_action(curr_x)
-            # 累加当前步 cost
+
             cost = torch.sum(curr_x * (curr_x @ Q), dim=1, keepdim=True) + torch.sum(u * (u @ R), dim=1, keepdim=True)
             step_cost = cost.squeeze() * dt
             
@@ -407,7 +407,7 @@ def plot_value():
             if step > 0:
                 V_next_rl += step_cost
             
-            # 使用 RK4 进行状态更新以保证精度
+
             k1 = dynamics(curr_x, u)
             x2_rk = curr_x + 0.5 * dt * k1
             u2 = agent.get_action(x2_rk)
@@ -421,18 +421,18 @@ def plot_value():
             
             curr_x = curr_x + (dt / 6.0) * (k1 + 2*k2 + 2*k3 + k4)
             
-        # 给 V_next_rl 补上最后一步的 cost，保证积分长度相同
+
         u = agent.get_action(curr_x)
         cost = torch.sum(curr_x * (curr_x @ Q), dim=1, keepdim=True) + torch.sum(u * (u @ R), dim=1, keepdim=True)
         V_next_rl += cost.squeeze() * dt
 
     rl_values = V_rl.cpu().numpy().reshape(X1.shape)
     
-    # ------------------ 计算 RL 值函数的时间导数 \dot{V} ------------------
-    # 直接根据轨迹序列上的 \Delta V 计算 \dot{V} = (V(x_{t+dt}) - V(x_t)) / dt
+
+
     V_dot_rl = ((V_next_rl - V_rl) / dt).cpu().numpy().reshape(X1.shape)
 
-    # ------------------ 计算 Optimal 值函数 ------------------
+
     P = np.array([[0.5, 0.0], [0.0, 1.0]])
     opt_values = np.einsum('ij,jk,ik->i', X_grid, P, X_grid).reshape(X1.shape)
     
@@ -446,7 +446,7 @@ def plot_value():
         fxu_opt = dynamics(X_grid_torch, u_star_opt)
     V_dot_opt = (gradV_opt * fxu_opt).sum(dim=1).reshape(X1.shape).detach().numpy()
 
-    # ================== 绘制对比曲面 ==================
+
     from mpl_toolkits.mplot3d import Axes3D
     import matplotlib.gridspec as gridspec
 
@@ -476,7 +476,7 @@ def plot_value():
     ax2.set_xlim([-3, 3])
     ax2.set_ylim([-3, 3])
     
-    # 相轨迹矢量图
+
     x1_lin = np.linspace(-3, 3, 25)
     x2_lin = np.linspace(-3, 3, 25)
     X1_grid, X2_grid = np.meshgrid(x1_lin, x2_lin)
@@ -513,7 +513,7 @@ def plot_value():
     filename = "image/" + args.filename_prefix + "value_function.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # 单独画对比曲面（图1第一个子图的单独版）
+
     fig2_standalone = plt.figure(figsize=(6,5))
     ax2_3d = fig2_standalone.add_subplot(111, projection='3d')
     surf_fig2_1 = ax2_3d.plot_surface(
@@ -538,7 +538,7 @@ def plot_value():
     filename2 = "image/" + args.filename_prefix + "value_function_3d_standalone.svg"
     plt.savefig(filename2, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # 单独画 RL 值函数等高线图
+
     fig3 = plt.figure(figsize=(6,5))
     ax3 = fig3.add_subplot(111, projection='3d')
     z_min = min(np.min(rl_values), np.min(rl_values))
@@ -550,7 +550,7 @@ def plot_value():
     filename = "image/" + args.filename_prefix + "rl_value.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # 单独画 RL \dot{V} 的等高线图
+
     fig4 = plt.figure(figsize=(6,5))
     ax4 = fig4.add_subplot(111, projection='3d')
     z_min = min(np.min(V_dot_rl), np.min(V_dot_rl))
@@ -562,7 +562,7 @@ def plot_value():
     filename = "image/" + args.filename_prefix + "rl_value_dot.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # 单独画相图 Quiver
+
     fig5 = plt.figure(figsize=(6,5))
     ax5 = fig5.add_subplot(111)
     Q_quiver2 = ax5.quiver(
@@ -583,7 +583,7 @@ def plot_value():
 
 def simulate_once():
     """
-    加载训练好的RL网络和环境，进行一次仿真，并画出状态和控制的时间曲线
+    Load the trained RL policy and environment, run one simulation, and plot the state and control histories.
     """
     env = gym.make(Args.env_id)
     options = {}
@@ -611,7 +611,7 @@ def simulate_once():
     for t in range(T):
         x_tensor = torch.from_numpy(obs).float().unsqueeze(0).to(Args.device)
         with torch.no_grad():
-            # 测试时取确定性动作
+
             u = agent.get_action(x_tensor).cpu().numpy().squeeze()
             if u.ndim == 0:
                 u = np.expand_dims(u, axis=0)
@@ -619,7 +619,7 @@ def simulate_once():
         obs, _, terminated, truncated, _ = env.step(u)
         obs = np.array(obs, dtype=np.float32)
         state_traj.append(obs.copy())
-        # 取数值以便绘图
+
         control_traj.append(u.item() if u.size == 1 else u)
         time_traj.append((t+1)*env.dt if hasattr(env, "dt") else (t+1)*0.05)
 
@@ -648,7 +648,7 @@ def simulate_once():
 
 if __name__ == "__main__":
     args = Args()
-    # 训练模型请取消注释下面一行
+
     train_rl()
     plot_value()
     simulate_once()

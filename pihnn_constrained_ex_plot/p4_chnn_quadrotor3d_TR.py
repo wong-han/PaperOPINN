@@ -1,5 +1,5 @@
 '''
-简化所有loss计算为一体; 使用正定值函数网络设计；二维无人机
+Combine all loss terms and use a positive-definite value-network design for the quadrotor.
 '''
 import sys, os
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -17,57 +17,57 @@ from scipy.linalg import solve_continuous_are
 from utils import DroneVisualizer
 from copy import deepcopy
 
-# ================== 图像设置 =======================
-mpl.rcParams['font.family'] = 'Times New Roman'  # 默认字体
-# mpl.rcParams['font.weight'] = 'bold'  # 加粗
-mpl.rcParams['text.usetex'] = False  # 使用TEX
-mpl.rcParams['axes.unicode_minus'] = False  # 解决无法显示负号
-mpl.rcParams['xtick.direction'] = 'in'  # x轴刻度线朝内
-mpl.rcParams['ytick.direction'] = 'in'  # y轴刻度线朝内
-mpl.rcParams['xtick.top'] = True  # 显示上方的坐标轴
-mpl.rcParams['ytick.right'] = True  # 显示右侧的坐标轴
+# Plot settings
+mpl.rcParams['font.family'] = 'Times New Roman'  # Default font
+# Bold font
+mpl.rcParams['text.usetex'] = False  # Use TeX rendering
+mpl.rcParams['axes.unicode_minus'] = False  # Render minus signs correctly
+mpl.rcParams['xtick.direction'] = 'in'  # Draw ticks inward
+mpl.rcParams['ytick.direction'] = 'in'  # Draw ticks inward
+mpl.rcParams['xtick.top'] = True  # Show top ticks
+mpl.rcParams['ytick.right'] = True  # Show right ticks
 
-mpl.rcParams['legend.frameon'] = False  # legend不显示边框
-mpl.rcParams['legend.fontsize'] = 24  # legend默认size
+mpl.rcParams['legend.frameon'] = False  # Hide the legend frame
+mpl.rcParams['legend.fontsize'] = 24  # Default legend font size
 
-mpl.rcParams['xtick.labelsize'] = 24  # x坐标默认size
-mpl.rcParams['ytick.labelsize'] = 24  # y坐标默认size
-mpl.rcParams['axes.labelsize'] = 24  # 轴标题默认size
-mpl.rcParams['lines.linewidth'] = 2  # 线条宽度
+mpl.rcParams['xtick.labelsize'] = 24  # Default tick-label size
+mpl.rcParams['ytick.labelsize'] = 24  # Default tick-label size
+mpl.rcParams['axes.labelsize'] = 24  # Default axis-label size
+mpl.rcParams['lines.linewidth'] = 2  # Line width
 mpl.rcParams['axes.grid'] = True
-mpl.rcParams['grid.linestyle'] = '--'  # 虚线
-mpl.rcParams['grid.alpha'] = 0.5       # 透明度
-mpl.rcParams['grid.color'] = 'gray'    # 网格颜色
+mpl.rcParams['grid.linestyle'] = '--'  # Dashed grid lines
+mpl.rcParams['grid.alpha'] = 0.5       # Transparency
+mpl.rcParams['grid.color'] = 'gray'    # Grid color
 
 
-# =================== 参数设置 ======================
+# Parameters
 class Args:
-    # 环境名称
+    # Environment identifier
     env_id = "environment:quadrotor3d_TR_constrained"
-    # 模型名称
+    # Model name
     model_name = "chnn_quadrotor3d_TR_v1.pth"
-    # 训练范围
+    # Training domain
     train_range = 1.0
-    # 学习率
+    # Learning rate
     learning_rate = 1e-3
-    # 总训练次数
+    # Total training iterations
     time_steps = 80000
-    # 训练批次
+    # Training batch size
     batch_size = 2048
-    # 时间范围
+
     T = 1
-    # 轨迹前向长度
+
     forward_steps = 5
-    # 是否使用GPU
+    # Select the compute device
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    # 文件名前缀
+    # Output filename prefix
     filename_prefix = "chnn_quadrotor3d_"
 
-# 动力学相关
+# Dynamics
 def dynamics(X, U):
     # X: (N, 9) -> [x, y, z, vx, vy, vz, phi, theta, psi]
     # U: (N, 4) -> [T, p, q, r]
-    # 参考quadrotor3d_TR.py的动力学
+
     x = X[:, 0]
     y = X[:, 1]
     z = X[:, 2]
@@ -111,14 +111,14 @@ _env_tmp = gym.make(Args.env_id).unwrapped
 m = _env_tmp.metadata['m']
 g = _env_tmp.metadata['g']
 
-# 计算控制矩阵pfpu
+# Compute the control Jacobian
 def get_pfpu(X):
     """
-    计算三维无人机动力学对u的雅可比矩阵（每个样本一个9x4矩阵）
+    Compute the control Jacobian of the three-dimensional quadrotor dynamics for each sample.
     X: (N, 12) -> [x, y, z, vx, vy, vz, phi, theta, psi]
-    返回: (N, 12, 4)
+    Returns: (N, 12, 4)
     """
-    # 物理参数
+
     # m, I, g
     phi = X[:, 6]
     theta = X[:, 7]
@@ -140,15 +140,15 @@ def get_pfpu(X):
 
     return pfpu
 
-# 计算pfpx
+# Compute the state Jacobian
 def get_pfpx(X, U):
     """
-    计算三维无人机动力学对X的雅可比矩阵（每个样本一个12x12矩阵）
+    Compute the state Jacobian of the three-dimensional quadrotor dynamics for each sample.
     X: (N, 12)
     U: (N, 4)
-    返回: (N, 12, 12)
+    Returns: (N, 12, 12)
     """
-    # 这里只实现主要的非零项，详细推导可参考quadrotor3d_TM.py
+
     phi = X[:, 6]
     theta = X[:, 7]
     psi = X[:, 8]
@@ -181,7 +181,7 @@ def get_pfpx(X, U):
     return pfpx
 
 
-# 计算罚函数
+# Compute the penalty
 def get_penalty(X):
     # X: (batch_size, 2)
     y = X[:, 1]
@@ -190,12 +190,12 @@ def get_penalty(X):
     return p
 
 
-# 计算pPpx
+# Compute the penalty gradient
 def get_pPpx(X):
     y = X[:, 1]
     # pPpz = 10 * (z < 0).float()
     pPpy = -30 * torch.exp(-y) * (y < 0).float()
-    # 其余偏导为0
+
     batch_size = X.shape[0]
     pPpX = torch.zeros(batch_size, 9, dtype=X.dtype, device=X.device)
     pPpX[:, 1] = pPpy
@@ -207,7 +207,7 @@ class HNN(nn.Module):
         self.env = env.unwrapped if hasattr(env, 'unwrapped') else env
         super().__init__()
 
-        # 共享层
+        # Shared layers
         self.shared_net = nn.Sequential(
             layer_init(nn.Linear(env.observation_space.shape[0], 64)),
             nn.Tanh(),
@@ -287,7 +287,7 @@ class HNN(nn.Module):
     
     def get_pHpX(self, x):
         x = x.requires_grad_(True)
-        Lambda = self.get_lambda(x).detach()  # 切断Lambda对x的梯度连接
+        Lambda = self.get_lambda(x).detach()  # Detach the costate output from the state graph
         hamilton_input = torch.cat([x, Lambda], dim=-1)
         H = self.hamilton_part(hamilton_input).squeeze(-1)  # (batch,)
         grads = []
@@ -306,7 +306,7 @@ class HNN(nn.Module):
         
         pfpu = get_pfpu(X)  
         
-        # 计算 u_star = -0.5 * inv(R) * pfpu.T * grad_V
+
         R_inv = torch.tensor(np.linalg.inv(R), dtype=X.dtype, device=X.device)  
         pfpu_T = pfpu.transpose(1, 2)      
         u_star = -0.5 * torch.matmul(pfpu_T, Lambda)  
@@ -323,7 +323,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 def get_all_loss(model, X):
-    # 先把需要的量都算出来
+    # Compute the quantities required by the loss
     V = model.get_value(X)
     Lambda = model.get_lambda(X)
     Lambda_unsq = Lambda.unsqueeze(2)
@@ -368,19 +368,19 @@ def get_all_loss(model, X):
     u_star = delta_u + u0_tensor
     u_star = torch.clamp(u_star, u_min_tensor, u_max_tensor)
 
-    # 再计算损失
-    # 1 pVpx = lambda损失
+    # Assemble the loss terms
+
     loss1 = torch.nn.functional.mse_loss(Lambda, pVpX)
     
-    # 2 V > 0损失
+
     loss2 = torch.relu(-V).mean()
 
-    # 3 x_dot = pHpLambda损失
+
     fxu = dynamics(X, u_star)
     fxu_detach = fxu.detach().clone()
     loss3 = torch.nn.functional.mse_loss(fxu_detach, pHpLambda)
 
-    # 4 lambda_dot = -pHpX损失
+
     Q = model.env.Q
     Q_torch = torch.tensor(Q, dtype=X.dtype, device=X.device)
     pfpx = get_pfpx(X, u_star) 
@@ -392,7 +392,7 @@ def get_all_loss(model, X):
     Lambda_dot = -(term1 + term2 + pPpx)  
     loss4 = torch.nn.functional.mse_loss(-pHpX, Lambda_dot)
 
-    # 5 H = 0损失
+
     xQx = torch.einsum('bi,ij,bj->b', X, Q_torch, X)  # (batch_size,)
     uRu = torch.einsum('bi,ij,bj->b', delta_u, R_torch, delta_u)  # (batch_size,)
     gradV_fxu = (Lambda * fxu).sum(dim=1)
@@ -401,7 +401,7 @@ def get_all_loss(model, X):
     H_eq = xQx + uRu + gradV_fxu + penalty
     loss5 = (H_eq ** 2).mean()
     
-    # 6 神经网络直接的H=0损失
+
     # loss6 = torch.nn.functional.mse_loss(H_eq, H)
 
     return loss1 + loss2 + loss3 + loss4 + loss5 #+ loss6
@@ -410,7 +410,7 @@ def get_all_loss(model, X):
 def lambda_zero_loss(model):
     zero_point = torch.zeros(1, model.env.observation_space.shape[0], device=next(model.parameters()).device)
     zero_point_Lambda = model.get_lambda(zero_point)
-    # 计算零点处Lambda对输入的导数
+    # Differentiate the costate output at the origin
     zero_point = zero_point.clone().detach().requires_grad_(True)
     Lambda = model.get_lambda(zero_point)  # (1, state_dim)
     grad_Lambda = []
@@ -456,16 +456,16 @@ def train_hnn():
     ema_loss = None
 
     for step in range(args.time_steps):
-        # 采样数据
+        # Sample training data
         low = -args.train_range
         high = args.train_range
         x_batch = np.random.uniform(low, high, (args.batch_size, env.observation_space.shape[0]))
         X = torch.from_numpy(x_batch).float().to(args.device)
         X.requires_grad_(True)
-        # 计算损失函数
+        # Compute the loss
         loss = get_all_loss(hnn, X) + lambda_zero_loss(hnn)
 
-        # 累计代价损失
+        # Running-cost loss
         x = X.detach().clone()
         for i in range(args.forward_steps):
             pfpu = get_pfpu(x)
@@ -483,11 +483,11 @@ def train_hnn():
             uRu = torch.einsum('bi,ij,bj->b', u_star-u0_tensor, R_torch, u_star-u0_tensor)
             penalty = get_penalty(x)
             loss += (xQx + uRu + penalty).mean() * dt
-        # 终端代价损失
+        # Terminal-cost loss
         xPx =  torch.einsum('bi,ij,bj->b', x, P_torch, x)
         loss += xPx.mean()
 
-        # 更新参数
+        # Update model parameters
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
@@ -498,7 +498,7 @@ def train_hnn():
         else:
             ema_loss = 0.95 * ema_loss + 0.05 * current_loss
 
-        # 打印损失
+        # Report the loss
         if step % 100 == 0:
             if ema_loss < best_loss - 1:
                 best_loss = ema_loss
@@ -519,7 +519,7 @@ def train_hnn():
             print(f"HNN model saved to {model_path}")
             break
 
-        # 保存pinn模型到model文件夹
+        # Save the PINN checkpoint in the model directory
         if step > 1000 and (step % 5000 == 0 or step == (args.time_steps-1)):
             model_dir = "model"
             os.makedirs(model_dir, exist_ok=True)
@@ -532,7 +532,7 @@ def train_hnn():
 
 
 def plot_value():
-    # 加载模型参数
+    # Load model parameters
     args = Args()
     env = gym.make(args.env_id).unwrapped
     hnn = HNN(env)
@@ -541,27 +541,27 @@ def plot_value():
     hnn.load_state_dict(torch.load(model_path, map_location="cpu"))
     hnn.eval()
 
-    # 构建9维状态的切片网格，x1,x2在-train_range到train_range之间，其他维度为0
+    # Construct a nine-dimensional state slice
     x1 = np.linspace(-args.train_range, args.train_range, 50)
     x2 = np.linspace(-args.train_range, args.train_range, 50)
     X1, X2 = np.meshgrid(x1, x2)
     X1_flat = X1.ravel()
     X2_flat = X2.ravel()
-    # 其余7维为0
+    # Set the remaining seven dimensions to zero
     X_rest = [np.zeros_like(X1_flat) for _ in range(7)]
     X_grid = np.stack([X1_flat, X2_flat] + X_rest, axis=1)  # shape (N, 9)
 
-    # HNN值函数
+
     X_tensor = torch.from_numpy(X_grid).float()
     with torch.no_grad():
         hnn_values = hnn.get_value(X_tensor).cpu().numpy()
     hnn_values = hnn_values.reshape(X1.shape)
 
-    # LQR值函数: V(x) = x^T P x, 其中P为环境的LQR解
-    P = env.P  # 直接从环境获取LQR解
+
+    P = env.P  # Read the LQR solution from the environment
     lqr_values = np.einsum('ij,jk,ik->i', X_grid, P, X_grid).reshape(X1.shape)
 
-    # 绘制对比曲面
+    # Plot the comparison surfaces
     fig = plt.figure(figsize=(16,6))
 
     ax1 = fig.add_subplot(1, 1, 1, projection='3d')
@@ -572,7 +572,7 @@ def plot_value():
     ax1.set_zlabel('Value')
     ax1.set_title('Value Surface (slice $x_3$-$x_{9}=0$)')
 
-    # 添加colorbar并分别标注
+    # Add and label color bars
     mappable1 = plt.cm.ScalarMappable(cmap='viridis')
     mappable1.set_array(hnn_values)
     cbar1 = fig.colorbar(mappable1, ax=ax1, shrink=0.5, pad=0.1)
@@ -588,7 +588,7 @@ def plot_value():
 
 
 def plot_lambda():
-    # 加载hnnv2_quadrotor3d_TM模型参数
+    # Model parameters
     args = Args()
     env = gym.make(args.env_id).unwrapped
     hnn = HNN(env)
@@ -597,10 +597,10 @@ def plot_lambda():
     hnn.load_state_dict(torch.load(model_path, map_location="cpu"))
     hnn.eval()
 
-    # LQR P矩阵（直接从环境获取）
+
     P = env.P
 
-    # 构建9维状态的切片网格，x1,x2在-train_range到train_range之间，其余为0
+    # Construct a nine-dimensional state slice
     x1 = np.linspace(-args.train_range, args.train_range, 30)
     x2 = np.linspace(-args.train_range, args.train_range, 30)
     X1, X2 = np.meshgrid(x1, x2)
@@ -614,7 +614,7 @@ def plot_lambda():
     # HNN Lambda
     with torch.no_grad():
         hnn_lambda = hnn.get_lambda(X_tensor).cpu().numpy()  # shape (N, 9)
-    # 每个维度reshape成(X1.shape)
+    # Reshape each state component
     hnn_lambda_list = [hnn_lambda[:, i].reshape(X1.shape) for i in range(9)]
 
     # LQR Lambda: Lambda = 2 * P * X
@@ -623,7 +623,7 @@ def plot_lambda():
 
     lambda_names = [rf'$\lambda_{i+1}$' for i in range(9)]
 
-    # ----------- 9个子图，每个子图画HNN和LQR对应维度的lambda曲面 -----------
+
     fig = plt.figure(figsize=(24, 12))
     for i in range(9):
         ax = fig.add_subplot(3, 3, i+1, projection='3d')
@@ -633,7 +633,7 @@ def plot_lambda():
         ax.set_ylabel('x2')
         ax.set_zlabel(lambda_names[i])
         ax.set_title(f"{lambda_names[i]} (slice $x_3$-$x_{{9}}=0$)")
-        # colorbar只加HNN的
+        # Add the color bar only for OPINN
         mappable1 = plt.cm.ScalarMappable(cmap='Blues')
         mappable1.set_array(hnn_lambda_list[i])
         cbar1 = fig.colorbar(mappable1, ax=ax, shrink=0.6, pad=0.05)
@@ -642,7 +642,7 @@ def plot_lambda():
         mappable2.set_array(lqr_lambda_list[i])
         cbar2 = fig.colorbar(mappable2, ax=ax, shrink=0.6, pad=0.01)
         cbar2.set_label('LQR', fontsize=10)
-        # 图例
+        # Legend
         custom_lines = [
             plt.Line2D([0], [0], color='tab:blue', lw=4, label='HNN'),
             plt.Line2D([0], [0], color='tab:orange', lw=4, label='LQR'),
@@ -653,12 +653,12 @@ def plot_lambda():
 
 
 def simulate_once():
-    # 仿真LQR和HNN控制效果
+    # Simulate LQR and OPINN closed-loop control
     args = Args()
     device = args.device
     env_probe = gym.make(args.env_id, theoretic_mode=True).unwrapped
 
-    # 仿真参数
+    # Simulation parameters
     horizon = int(env_probe.T / env_probe.dt)
     A_np = env_probe.A
     B_np = env_probe.B
@@ -668,7 +668,7 @@ def simulate_once():
     g = env_probe.metadata['g']
     u0 = env_probe.u0
 
-    # 计算LQR控制器
+    # Compute the LQR controller
     P = solve_continuous_are(A_np, B_np, Q_np, R_np)
     K = np.linalg.inv(R_np) @ B_np.T @ P
     def lqr_action(x_np):
@@ -676,7 +676,7 @@ def simulate_once():
         u = np.clip(u, env_probe.action_space.low, env_probe.action_space.high)
         return np.array(u, dtype=np.float32)
 
-    # 加载HNN模型
+    # Load the OPINN model
     hnn_path = "model/" + args.model_name
     # hnn_path = "model/" + 'hnn_quadrotor3d_TR_v2_20000.pth'
     env_hnn = gym.make(args.env_id, theoretic_mode=True).unwrapped
@@ -684,7 +684,7 @@ def simulate_once():
     hnn.load_state_dict(torch.load(hnn_path, map_location=device))
     hnn.eval()
 
-    # HNN控制器
+    # OPINN controller
     R_torch = torch.tensor(R_np, dtype=torch.float32, device=device)
     R_inv = torch.linalg.inv(R_torch)
     def hnn_action(x_np):
@@ -696,16 +696,16 @@ def simulate_once():
         u_tmp = -0.5 * torch.matmul(pfpu_T, Lambda.unsqueeze(2)).squeeze(-1)  # (1, 4)
         u = (R_inv @ u_tmp.T).T.squeeze(0)  # (4,)
         u = u.detach().cpu().numpy()
-        u = u + u0  # 加重力补偿
+        u = u + u0  # Add gravity compensation
         u = np.clip(u, env_probe.action_space.low, env_probe.action_space.high)
         return np.array(u, dtype=np.float32)
 
-    # 初始化环境
+    # Initialize the environments
     seed = np.random.randint(0, 1000000)
     env_lqr = gym.make(args.env_id, theoretic_mode=True).unwrapped
     obs_lqr, _ = env_lqr.reset(seed=seed, positive_y=True)
     env_hnn = gym.make(args.env_id, theoretic_mode=True).unwrapped
-    obs_hnn, _ = env_hnn.reset(seed=seed, positive_y=True)  # 用同一个初始条件
+    obs_hnn, _ = env_hnn.reset(seed=seed, positive_y=True)  # Use the same initial condition
 
     ret_lqr = 0.0
     u_seq_lqr = []
@@ -740,7 +740,7 @@ def simulate_once():
     traj_u_hnn = np.vstack(u_seq_hnn)
     traj_x_hnn = np.vstack(x_seq_hnn)
 
-    # 绘制控制输入轨迹
+    # Plot control trajectories
     time = np.arange(horizon)
     plt.figure(figsize=(12, 6))
     for i in range(4):
@@ -753,7 +753,7 @@ def simulate_once():
     plt.grid(True, linestyle='--', alpha=0.4)
     plt.tight_layout()
 
-    # 绘制状态轨迹
+    # Plot state trajectories
     time_x = np.arange(horizon + 1)
     fig, axs = plt.subplots(9, 1, figsize=(12, 14), sharex=True)
     for i, ax in enumerate(axs):
@@ -767,11 +767,11 @@ def simulate_once():
     fig.suptitle("State trajectories (single episode)")
     plt.tight_layout()
 
-    # 画出三维位置轨迹，并添加障碍物
+
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection='3d')
 
-    # 提取三维位置 (假设状态 x1,x2,x3 为3D位置)
+
     traj_x_lqr_pos = traj_x_lqr[:, :3]
     traj_x_hnn_pos = traj_x_hnn[:, :3]
 
@@ -786,7 +786,7 @@ def simulate_once():
     plt.tight_layout()
 
 
-    # 打印回报
+    # Report returns
     print("Single episode return:")
     print(f"LQR: {ret_lqr:.3f}")
     print(f"HNN: {ret_hnn:.3f}")
@@ -810,19 +810,19 @@ def monte_carlo_simulation():
     R = env_lqr.metadata['R']
     u0 = env_lqr.u0
 
-    # LQR控制器
+    # LQR controller
     A = env_lqr.A
     B = env_lqr.B
     P = solve_continuous_are(A, B, Q, R)
     K = np.linalg.inv(R) @ B.T @ P
 
-    # 加载HNN
+
     device = "cpu"
     hnn = HNN(env_hnn).to(device)
     hnn.load_state_dict(torch.load("model/"+args.model_name, map_location=device))
     hnn.eval()
 
-    # HNN控制器
+    # OPINN controller
     R_torch = torch.tensor(R, dtype=torch.float32, device=device)
     R_inv = torch.linalg.inv(R_torch)
     def hnn_action(x_np):
@@ -849,7 +849,7 @@ def monte_carlo_simulation():
     for ep in range(num_episodes):
         print(f"{ep}/{num_episodes}")
 
-        # 统一seed
+
         seed = np.random.randint(0, 1000000)
         obs_lqr, _ = env_lqr.reset(seed=seed, positive_y=True)
         obs_hnn, _ = env_hnn.reset(seed=seed, positive_y=True)
@@ -901,7 +901,7 @@ def monte_carlo_simulation():
                 drone_visualizer.add_one_traj(traj=traj_x_hnn[:hnn_truncated_count, 0:3], attitudes=np.rad2deg(traj_x_hnn[:hnn_truncated_count, 6:9]), stride=50)
         else:
             drone_visualizer.add_only_traj(traj=deepcopy(traj_x_hnn[:hnn_truncated_count, 0:3]))
-    # 在三维图中画一个 y=0 的平面
+
     xlim = drone_visualizer.ax.get_xlim()
     zlim = drone_visualizer.ax.get_zlim()
     xx, zz = np.meshgrid(np.linspace(xlim[0], xlim[1], 20), np.linspace(zlim[0], zlim[1], 20))
@@ -914,11 +914,11 @@ def monte_carlo_simulation():
     env_lqr.close()
     env_hnn.close()
 
-    # ========== 画轨迹统计图 ==========
+
     time_x = np.arange(horizon + 1)
     time_u = np.arange(horizon)
 
-    # 状态轨迹
+    # State trajectories
     fig, axs = plt.subplots(9, 1, figsize=(12, 14), sharex=True)
     for i, ax in enumerate(axs):
         for ep in range(num_episodes):
@@ -933,20 +933,20 @@ def monte_carlo_simulation():
     filename = "image/" + args.filename_prefix + "state_traj.png"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # 控制量轨迹（参考Nature配色风格，LQR-绿色，HNN-紫色，所有episode透明叠加线+平均线加粗显示）
+    # Control trajectories
     control_labels = ['$T$\,(N)', '$p$\,(rad/s)', '$q$\,(rad/s)', '$r$\,(rad/s)']
-    # Nature配色
+
     nature_green = "#389826"   # LQR
     nature_purple = "#9558B2"  # HNN
     fig, axs = plt.subplots(4, 1, figsize=(6, 6.3), sharex=True)
     for i, ax in enumerate(axs):
-        # 画LQR（绿色），所有episode，透明度0.22
+        # Transparency
         for ep in range(num_episodes):
             ax.plot(time_u*env_lqr.dt, all_traj_u_lqr[ep][:, i], color=nature_green, alpha=0.22, linewidth=1)
-        # 画HNN（紫色），所有episode，透明度0.22
+        # Transparency
         for ep in range(num_episodes):
             ax.plot(time_u*env_hnn.dt, all_traj_u_hnn[ep][:, i], color=nature_purple, alpha=0.22, linewidth=1)
-        # 平均轨迹线条加粗
+        # Bold font
         mean_lqr = np.stack([all_traj_u_lqr[ep][:, i] for ep in range(num_episodes)]).mean(axis=0)
         mean_hnn = np.stack([all_traj_u_hnn[ep][:, i] for ep in range(num_episodes)]).mean(axis=0)
         ax.plot(time_u*env_lqr.dt, mean_lqr, color=nature_green, linewidth=2.6, label="LQR" if i==0 else "")
@@ -954,16 +954,16 @@ def monte_carlo_simulation():
         ax.set_ylabel(control_labels[i])
         ax.grid(True, linestyle='--', alpha=0.36)
     axs[-1].set_xlabel("$t$ (s)")
-    # 只在第一个子图加图例
+    # Legend
     axs[0].legend(loc="best")
     plt.tight_layout()
     filename = "image/" + args.filename_prefix + "control_traj.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # ========== 箱线图及统计 ==========
+
     final_dist_lqr = np.array([np.linalg.norm(traj[-1, 0:3]) for traj in all_traj_x_lqr])
     final_dist_hnn = np.array([np.linalg.norm(traj[-1, 0:3]) for traj in all_traj_x_hnn])
-    # 认为 距离 > 0.1 为失败
+    # Treat terminal distances above 0.1 as failures
     success_mask_lqr = final_dist_lqr <= 0.1
     success_mask_hnn = final_dist_hnn <= 0.1
     filtered_returns_lqr = np.array(returns_lqr)[success_mask_lqr]
@@ -971,21 +971,21 @@ def monte_carlo_simulation():
     success_rate_lqr = np.sum(success_mask_lqr) / len(success_mask_lqr)
     success_rate_hnn = np.sum(success_mask_hnn) / len(success_mask_hnn)
 
-    # 最小y统计
+    # Minimum-y statistics
     min_y_lqr = np.array([np.min(traj[:, 1]) for traj in all_traj_x_lqr])
     min_y_hnn = np.array([np.min(traj[:, 1]) for traj in all_traj_x_hnn])
     filtered_min_y_lqr = min_y_lqr[success_mask_lqr]
     filtered_min_y_hnn = min_y_hnn[success_mask_hnn]
 
     import seaborn as sns
-    palette = ["#f6c85f", "#88bde6"]  # LQR, HNN 主色
+    palette = ["#f6c85f", "#88bde6"]
     boxprops = dict(linewidth=2, color='k')
     medianprops = dict(linewidth=2, color="#d24d57")
     whiskerprops = dict(linewidth=1.5, color='k')
     capprops = dict(linewidth=1.5, color='k')
     flierprops = dict(marker='o', markerfacecolor='#ff7f0e', markersize=7, linestyle='none', alpha=0.3, markeredgecolor='k')
 
-    # --------------- 回报箱线图 ---------------
+    # Return box plot
     fig, ax = plt.subplots(figsize=(5, 8))
     bp = ax.boxplot(
         [-filtered_returns_lqr, -filtered_returns_hnn],
@@ -1017,17 +1017,17 @@ def monte_carlo_simulation():
     filename = "image/" + args.filename_prefix + "return_boxplot.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # --------------- ymin绝对值对数箱线图（Nature风格: Seaborn小提琴+箱线+散点，配色与参考一致）---------------
+
     import pandas as pd
-    # 使用Nature推荐色：绿色 #389826 (LQR)，紫色 #9558B2 (HNN)
+
     nature_green = "#389826"   # LQR
     nature_purple = "#9558B2"  # HNN
     violin_palette = [nature_green, nature_purple]
-    # 计算ymin的对数（取绝对值后以10为底的对数, 避免log(0)）
-    eps = 1e-8  # 防止log(0)
+    # Use the absolute value
+    eps = 1e-8  # Avoid log(0)
     log_abs_ymin_lqr = np.log10(np.abs(filtered_min_y_lqr) + eps)
     log_abs_ymin_hnn = np.log10(np.abs(filtered_min_y_hnn) + eps)
-    # 建立DataFrame，合并两组数据，并标注类型
+
     df_logymin = pd.DataFrame({
         r"$\log_{10}|y_{\mathrm{min}}|$": np.concatenate([log_abs_ymin_lqr, log_abs_ymin_hnn]),
         "Controller": ["LQR"] * len(log_abs_ymin_lqr) + ["HNN"] * len(log_abs_ymin_hnn)
@@ -1036,14 +1036,14 @@ def monte_carlo_simulation():
     ymin_label_hnn = r"HNN"
     show_ymin_labels = [ymin_label_lqr, ymin_label_hnn]
     fig2, ax2 = plt.subplots(figsize=(5, 7))
-    # 小提琴底色
+
     sns.violinplot(
         x="Controller", y=r"$\log_{10}|y_{\mathrm{min}}|$", data=df_logymin,
         order=["LQR", "HNN"],
         palette=violin_palette, inner=None, alpha=0.22, cut=0,
         linewidth=1.2, ax=ax2
     )
-    # 箱线（叠加，与参考一致风格）
+
     sns.boxplot(
         x="Controller", y=r"$\log_{10}|y_{\mathrm{min}}|$", data=df_logymin,
         order=["LQR", "HNN"],
@@ -1054,7 +1054,7 @@ def monte_carlo_simulation():
         capprops=dict(linewidth=1.2),
         ax=ax2
     )
-    # 散点（低对比度灰色点，形式同参考）
+
     sns.stripplot(
         x="Controller", y=r"$\log_{10}|y_{\mathrm{min}}|$", data=df_logymin,
         order=["LQR", "HNN"],
@@ -1068,12 +1068,12 @@ def monte_carlo_simulation():
     filename_y = "image/" + args.filename_prefix + "min_y_boxplot.svg"
     plt.savefig(filename_y, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # 打印回报统计
+    # Report return statistics
     print("Monte Carlo 50 episodes return statistics:")
     print(f"LQR: mean={np.mean(returns_lqr):.3f}, std={np.std(returns_lqr):.3f}, min={np.min(returns_lqr):.3f}, max={np.max(returns_lqr):.3f}")
     print(f"HNN: mean={np.mean(returns_hnn):.3f}, std={np.std(returns_hnn):.3f}, min={np.min(returns_hnn):.3f}, max={np.max(returns_hnn):.3f}")
 
-    # 打印最小y统计
+    # Minimum-y statistics
     print("Monte Carlo 50 episodes min y statistics:")
     print(f"LQR: mean={np.mean(min_y_lqr):.3f}, std={np.std(min_y_lqr):.3f}, min={np.min(min_y_lqr):.3f}, max={np.max(min_y_lqr):.3f}")
     print(f"HNN: mean={np.mean(min_y_hnn):.3f}, std={np.std(min_y_hnn):.3f}, min={np.min(min_y_hnn):.3f}, max={np.max(min_y_hnn):.3f}")

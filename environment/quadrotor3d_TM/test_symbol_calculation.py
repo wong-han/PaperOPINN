@@ -15,10 +15,10 @@ def print_sym_matrix(M, name='M'):
 
 def sympy_to_numpy_str(expr):
     """
-    将 SymPy 表达式字符串中的数学函数替换为 NumPy 版本
-    返回可直接在 NumPy 中使用的字符串
+    Replace mathematical functions in a SymPy expression string with NumPy equivalents.
+    Return a string that can be evaluated with NumPy.
     """
-    # 核心替换字典（可扩展）
+    # Core replacement map
     func_replacements = {
         r'sin\(': 'np.sin(',
         r'cos\(': 'np.cos(',
@@ -38,20 +38,20 @@ def sympy_to_numpy_str(expr):
         r'pi': 'np.pi',
         r'E': 'np.e',
         r'atan2\(': 'np.arctan2(',
-        r'Matrix': 'np.array',  # 替换矩阵表示
+        r'Matrix': 'np.array',
         r'Abs\(': 'np.abs('
     }
     
-    # 处理函数简写情况（如 sin x → sin(x))
+    # Handle abbreviated function notation
     expr = standardize_function_calls(expr)
     
-    # 进行替换（按优先级从长到短排序）
+    # Apply replacements
     for pattern, replacement in sorted(func_replacements.items(), 
                                         key=lambda x: len(x[0]), 
                                         reverse=True):
         expr = re.sub(pattern, replacement, expr)
     
-    # 特殊处理幂运算
+    # Handle exponentiation
     expr = re.sub(r'\*\*', '**', expr)
     
     return expr
@@ -59,10 +59,10 @@ def sympy_to_numpy_str(expr):
 
 def sympy_to_torch_str(expr):
     """
-    将 SymPy 表达式字符串中的数学函数替换为 NumPy 版本
-    返回可直接在 NumPy 中使用的字符串
+    Replace mathematical functions in a SymPy expression string with NumPy equivalents.
+    Return a string that can be evaluated with NumPy.
     """
-    # 核心替换字典（可扩展）
+    # Core replacement map
     func_replacements = {
         r'sin\(': 'torch.sin(',
         r'cos\(': 'torch.cos(',
@@ -82,20 +82,20 @@ def sympy_to_torch_str(expr):
         r'pi': 'torch.pi',
         r'E': 'torch.e',
         r'atan2\(': 'torch.arctan2(',
-        r'Matrix': 'torch.array',  # 替换矩阵表示
+        r'Matrix': 'torch.array',
         r'Abs\(': 'torch.abs('
     }
     
-    # 处理函数简写情况（如 sin x → sin(x))
+    # Handle abbreviated function notation
     expr = standardize_function_calls(expr)
     
-    # 进行替换（按优先级从长到短排序）
+    # Apply replacements
     for pattern, replacement in sorted(func_replacements.items(), 
                                         key=lambda x: len(x[0]), 
                                         reverse=True):
         expr = re.sub(pattern, replacement, expr)
     
-    # 特殊处理幂运算
+    # Handle exponentiation
     expr = re.sub(r'\*\*', '**', expr)
     
     return expr
@@ -103,22 +103,22 @@ def sympy_to_torch_str(expr):
 
 def standardize_function_calls(expr_str):
     """
-    标准化函数调用格式：确保所有函数调用都有括号
-    如转换 "sin x" 为 "sin(x)"
+    Normalize function-call syntax so every call uses parentheses.
+    For example, convert "sin x" to "sin(x)".
     """
-    # 识别常见的数学函数名
+    # Identify common mathematical functions
     math_funcs = ['sin', 'cos', 'tan', 'exp', 'log', 'sqrt', 'asin', 'acos', 
                   'atan', 'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh', 'abs']
     
-    # 按长度从长到短排序（优先匹配长函数名）
+    # Sort by decreasing pattern length
     func_pattern = '|'.join(sorted(math_funcs, key=len, reverse=True))
     
-    # 查找后跟非(字符的函数名
+    # Find function names not followed by an opening parenthesis
     def add_parentheses(match):
         func_name = match.group(0)
         return f"{func_name}("
     
-    # 处理简单函数调用（无参数）
+    # Handle simple function calls
     expr_str = re.sub(rf'\b({func_pattern})\b(?![\(])', add_parentheses, expr_str)
     
     return expr_str

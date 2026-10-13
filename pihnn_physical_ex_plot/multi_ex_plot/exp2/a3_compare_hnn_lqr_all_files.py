@@ -6,7 +6,7 @@ import matplotlib as mpl
 import numpy as np
 
 
-# ================== 图像设置 =======================
+# Plot settings
 mpl.rcParams['font.family'] = 'Times New Roman'
 mpl.rcParams['text.usetex'] = True
 mpl.rcParams['axes.unicode_minus'] = False

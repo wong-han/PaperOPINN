@@ -1,6 +1,7 @@
 '''
-对比程序：对比 HNN (OPINN), X-TFC PINN 与 Supervised 数值最优解基准
-（训练部分已剥离，HNN 网络定义和预训练模型直接从 pihnn_experiments_plot 引入）
+Comparison of HNN (OPINN), X-TFC PINN, and a supervised numerical-optimal-solution baseline.
+Training is excluded; the HNN architecture and pretrained model are imported directly
+from ``pihnn_experiments_plot``.
 '''
 import sys, os
 import time
@@ -21,30 +22,30 @@ from p3_pinn_angle3d import XTFC_PINN
 from pihnn_experiments_plot.p3_2_hnn_angle3d import HNN, dynamics, get_pfpu
 
 
-# ================== 图像设置 =======================
-mpl.rcParams['font.family'] = 'Times New Roman'  # 默认字体
-mpl.rcParams['text.usetex'] = True  # 使用TEX
-mpl.rcParams['axes.unicode_minus'] = False  # 解决无法显示负号
-mpl.rcParams['xtick.direction'] = 'in'  # x轴刻度线朝内
-mpl.rcParams['ytick.direction'] = 'in'  # y轴刻度线朝内
-mpl.rcParams['xtick.top'] = True  # 显示上方的坐标轴
-mpl.rcParams['ytick.right'] = True  # 显示右侧的坐标轴
+# Plot settings
+mpl.rcParams['font.family'] = 'Times New Roman'  # Default font
+mpl.rcParams['text.usetex'] = True  # Use TeX rendering
+mpl.rcParams['axes.unicode_minus'] = False  # Render minus signs correctly
+mpl.rcParams['xtick.direction'] = 'in'  # Draw ticks inward
+mpl.rcParams['ytick.direction'] = 'in'  # Draw ticks inward
+mpl.rcParams['xtick.top'] = True  # Show top ticks
+mpl.rcParams['ytick.right'] = True  # Show right ticks
 
-mpl.rcParams['legend.frameon'] = False  # legend不显示边框
-mpl.rcParams['legend.fontsize'] = 24  # legend默认size
+mpl.rcParams['legend.frameon'] = False  # Hide the legend frame
+mpl.rcParams['legend.fontsize'] = 24  # Default legend font size
 
-mpl.rcParams['axes.titlesize'] = 24   # 设置title默认size
-mpl.rcParams['xtick.labelsize'] = 24  # x坐标默认size
-mpl.rcParams['ytick.labelsize'] = 24  # y坐标默认size
-mpl.rcParams['axes.labelsize'] = 24  # 轴标题默认size
-mpl.rcParams['lines.linewidth'] = 2  # 线条宽度
+mpl.rcParams['axes.titlesize'] = 24   # Default title size
+mpl.rcParams['xtick.labelsize'] = 24  # Default tick-label size
+mpl.rcParams['ytick.labelsize'] = 24  # Default tick-label size
+mpl.rcParams['axes.labelsize'] = 24  # Default axis-label size
+mpl.rcParams['lines.linewidth'] = 2  # Line width
 mpl.rcParams['axes.grid'] = True
-mpl.rcParams['grid.linestyle'] = '--'  # 虚线
-mpl.rcParams['grid.alpha'] = 0.5       # 透明度
-mpl.rcParams['grid.color'] = 'gray'    # 网格颜色
+mpl.rcParams['grid.linestyle'] = '--'  # Dashed grid lines
+mpl.rcParams['grid.alpha'] = 0.5       # Transparency
+mpl.rcParams['grid.color'] = 'gray'    # Grid color
 
 
-# =================== 参数与路径设置 ======================
+# Parameters and paths
 class Args:
     env_id = "environment:angle3d-v0"
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -63,17 +64,17 @@ if not os.path.exists(SUP_MODEL_PATH):
 XTFC_MODEL_PATH = os.path.join(BASE_DIR, "model", "xtfc_angle3d.pth")
 
 
-# =================== 绘图与对比函数 ======================
+
 def plot_value():
     args = Args()
     env = gym.make(args.env_id)
 
-    # 1. 加载 HNN 模型
+
     hnn = HNN(env)
     hnn.load_state_dict(torch.load(HNN_MODEL_PATH, map_location="cpu"))
     hnn.eval()
 
-    # 2. 构建三维状态的切片网格，x1,x2在-1到1之间，x3=0
+    # Construct a three-dimensional state slice
     x1 = np.linspace(-1, 1, 50)
     x2 = np.linspace(-1, 1, 50)
     X1, X2 = np.meshgrid(x1, x2)
@@ -87,7 +88,7 @@ def plot_value():
         hnn_values = hnn.get_value(X_tensor).cpu().numpy()
     hnn_values = hnn_values.reshape(X1.shape)
 
-    # 3. 加载 XTFC PINN
+
     xtfc = XTFC_PINN(env, hidden_dim=400).to("cpu")
     if os.path.exists(XTFC_MODEL_PATH):
         xtfc.load_state_dict(torch.load(XTFC_MODEL_PATH, map_location="cpu"))
@@ -96,14 +97,14 @@ def plot_value():
     with torch.no_grad():
         xtfc_values = xtfc.get_value(X_tensor).cpu().numpy().reshape(X1.shape)
 
-    # 4. 绘制对比曲面在同一张图上
+    # Plot the comparison surfaces
     from mpl_toolkits.mplot3d import Axes3D
     from matplotlib.lines import Line2D
 
     fig = plt.figure(figsize=(16, 6))
     ax = fig.add_subplot(111, projection='3d')
 
-    # 使用单色渐变: HNN用Purples, X-TFC用Blues
+
     ax.plot_surface(
         X1, X2, hnn_values, cmap='Purples', alpha=0.85, linewidth=0, antialiased=True, rstride=1, cstride=1
     )
@@ -133,23 +134,23 @@ def plot_lambda():
     args = Args()
     env = gym.make(args.env_id)
 
-    # 1. 加载 HNN 模型
+
     hnn = HNN(env)
     hnn.load_state_dict(torch.load(HNN_MODEL_PATH, map_location="cpu"))
     hnn.eval()
 
-    # 2. 加载监督学习基准模型
+
     supervised_model = PINNNetwork(input_dim=3, output_dim=3, hidden_dim=32, num_layers=3)
     supervised_model.load_state_dict(torch.load(SUP_MODEL_PATH, map_location="cpu"))
     supervised_model.eval()
 
-    # 3. 加载 XTFC PINN 模型
+
     xtfc = XTFC_PINN(env, hidden_dim=400).to("cpu")
     if os.path.exists(XTFC_MODEL_PATH):
         xtfc.load_state_dict(torch.load(XTFC_MODEL_PATH, map_location="cpu"))
     xtfc.eval()
 
-    # 构建切片网格
+
     x1 = np.linspace(-1, 1, 50)
     x2 = np.linspace(-1, 1, 50)
     X1, X2 = np.meshgrid(x1, x2)
@@ -177,7 +178,7 @@ def plot_lambda():
     xtfc_lambda2 = xtfc_lambda[:, 1].reshape(X1.shape)
     xtfc_lambda3 = xtfc_lambda[:, 2].reshape(X1.shape)
 
-    # 计算误差
+    # Compute errors
     err_hnn1 = np.abs(hnn_lambda1 - sup_lambda1)
     err_hnn2 = np.abs(hnn_lambda2 - sup_lambda2)
     err_hnn3 = np.abs(hnn_lambda3 - sup_lambda3)
@@ -201,7 +202,7 @@ def plot_lambda():
 
     os.makedirs("image", exist_ok=True)
 
-    # 绘制 HNN (OPINN) 与 Supervised 对比 (Fig. 3a-c)
+
     figs = []
     for i in range(3):
         figs.append(plt.figure(figsize=(6, 5)))
@@ -231,7 +232,7 @@ def plot_lambda():
         filename = "image/" + args.filename_prefix + "lambda" + str(i + 1) + ".svg"
         fig.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # 绘制 X-TFC PINN 与 Supervised 对比 (Fig. 3d-f)
+
     figs_xtfc = []
     for i in range(3):
         figs_xtfc.append(plt.figure(figsize=(6, 5)))
@@ -262,7 +263,7 @@ def plot_lambda():
         filename = "image/" + args.filename_prefix + "lambda_xtfc" + str(i + 1) + ".svg"
         fig.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # 统一 colorbar
+
     if error_cf is not None:
         fig2 = plt.figure(figsize=(6, 10))
         ax = fig2.add_subplot(111)
@@ -388,7 +389,7 @@ def monte_carlo_simulation():
     time_steps = np.arange(horizon)
     colors = {"HNN": "tab:purple", "Supervised": "tab:orange", "X-TFC": "tab:blue"}
 
-    # 绘制控制动作对比
+
     fig_u, axs_u = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
     def plot_mean_std(ax, data, label, color):
         mean = data.mean(axis=0)
@@ -409,7 +410,7 @@ def monte_carlo_simulation():
     plt.tight_layout()
     plt.show()
 
-    # 绘制状态响应对比
+
     time_x = np.arange(horizon + 1)
     fig_x, axs_x = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
     def plot_mean_std_x(ax, data, label, color):

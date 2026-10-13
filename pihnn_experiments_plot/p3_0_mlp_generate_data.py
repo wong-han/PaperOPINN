@@ -1,5 +1,5 @@
 '''
-三轴角度控制最优数据生成 Generate Data
+Generate optimal data for three-axis attitude control.
 '''
 
 import numpy as np
@@ -9,21 +9,21 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import time
 
-mpl.rcParams['text.usetex'] = True  # 使用Latex语法
-mpl.rcParams['font.family'] = 'simsun'  # 解决中文问题
-mpl.rcParams['axes.unicode_minus'] = False  # 解决无法显示负号
+mpl.rcParams['text.usetex'] = True
+mpl.rcParams['font.family'] = 'simsun'
+mpl.rcParams['axes.unicode_minus'] = False  # Render minus signs correctly
 
-mpl.rcParams['xtick.direction'] = 'in'  # x轴刻度线朝内
-mpl.rcParams['ytick.direction'] = 'in'  # y轴刻度线朝内
-mpl.rcParams['xtick.top'] = True  # 显示上方的坐标轴
-mpl.rcParams['ytick.right'] = True  # 显示右侧的坐标轴
+mpl.rcParams['xtick.direction'] = 'in'  # Draw ticks inward
+mpl.rcParams['ytick.direction'] = 'in'  # Draw ticks inward
+mpl.rcParams['xtick.top'] = True  # Show top ticks
+mpl.rcParams['ytick.right'] = True  # Show right ticks
 
-mpl.rcParams['legend.frameon'] = False  # legend不显示边框
-mpl.rcParams['legend.fontsize'] = 9  # legend默认size
+mpl.rcParams['legend.frameon'] = False  # Hide the legend frame
+mpl.rcParams['legend.fontsize'] = 9  # Default legend font size
 
-mpl.rcParams['xtick.labelsize'] = 9  # x坐标默认size
-mpl.rcParams['ytick.labelsize'] = 9  # y坐标默认size
-mpl.rcParams['axes.labelsize'] = 9  # 轴标题默认size
+mpl.rcParams['xtick.labelsize'] = 9  # Default tick-label size
+mpl.rcParams['ytick.labelsize'] = 9  # Default tick-label size
+mpl.rcParams['axes.labelsize'] = 9  # Default axis-label size
 
 
 dt = 0.01
@@ -186,14 +186,14 @@ PLOT = False
 if PLOT:
     fig = plt.figure(figsize=[3.5, 3.5])
     ax1_0 = fig.add_subplot(111, projection='3d')
-    # 设置网格样式
+
     ax1_0.grid(True, linestyle='--', alpha=0.6, linewidth=0.5)
 
-    # 定义颜色循环和线型（用于区分不同轨迹）
-    color_cycle = plt.cm.tab20.colors  # 使用高对比度色板
-    line_styles = ['-', '--', '-.', ':']  # 不同线型
 
-    # 设置坐标轴标签和标题
+    color_cycle = plt.cm.tab20.colors
+    line_styles = ['-', '--', '-.', ':']
+
+
     ax1_0.set_xlabel(r'$\phi$(rad)', usetex=True)
     ax1_0.set_ylabel(r'$\theta$(rad)', usetex=True)
     ax1_0.set_zlabel(r'$\psi$(rad)', usetex=True)
@@ -233,7 +233,7 @@ while True:
         if count % interval == 0 and PLOT:
             ax1_0.scatter(x_d[0], x_d[1], x_d[2], c='k', marker='+', s=15, zorder=3)
         try:
-            i, x_d = next(walk_it)   # 主动获取下一个值
+            i, x_d = next(walk_it)
         except StopIteration:
             break
     else:

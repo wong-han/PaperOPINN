@@ -15,7 +15,7 @@ import gymnasium as gym
 from scipy.linalg import solve_continuous_are
 from supervised_training_common import train_from_saved_trajectories
 
-# ================== 图像设置 =======================
+# Plot settings
 mpl.rcParams['font.family'] = 'Times New Roman'
 mpl.rcParams['text.usetex'] = False
 mpl.rcParams['axes.unicode_minus'] = False
@@ -274,13 +274,13 @@ def monte_carlo_simulation():
     if hnn_loaded:
         env_hnn.close()
 
-    # ========== 计算成功率并过滤发散轨迹 ==========
+    # Compute success rates and remove divergent trajectories
     final_dist_lqr = np.array([np.linalg.norm(traj[-1, 0:3]) for traj in all_traj_x_lqr])
     final_dist_sp = np.array([np.linalg.norm(traj[-1, 0:3]) for traj in all_traj_x_sp])
     if hnn_loaded:
         final_dist_hnn = np.array([np.linalg.norm(traj[-1, 0:3]) for traj in all_traj_x_hnn])
         
-    # 认为 距离 > 0.1 为失败
+    # Treat terminal distances above 0.1 as failures
     success_mask_lqr = final_dist_lqr <= MONTE_CARLO_SUCCESS_TOL
     success_mask_sp = final_dist_sp <= MONTE_CARLO_SUCCESS_TOL
     if hnn_loaded:
@@ -368,7 +368,7 @@ def monte_carlo_simulation():
     if hnn_loaded:
         print(f"HNN: mean={np.mean(filtered_returns_hnn):.3f}, std={np.std(filtered_returns_hnn):.3f}")
 
-    # 最小y统计
+    # Minimum-y statistics
     min_y_lqr = np.array([np.min(traj[:, 1]) for traj in all_traj_x_lqr])
     min_y_sp = np.array([np.min(traj[:, 1]) for traj in all_traj_x_sp])
     if hnn_loaded:
@@ -461,7 +461,7 @@ def monte_carlo_simulation():
     capprops = dict(linewidth=1.5, color='k')
     flierprops = dict(marker='o', markerfacecolor='#ff7f0e', markersize=7, linestyle='none', alpha=0.3, markeredgecolor='k')
 
-    # --------------- 回报箱线图 ---------------
+    # Return box plot
     fig, ax = plt.subplots(figsize=(6, 8))
     bp = ax.boxplot(
         data_to_plot_J,
@@ -488,7 +488,7 @@ def monte_carlo_simulation():
     sns.despine(top=False, right=False, left=False, bottom=False, ax=ax)
     plt.savefig(os.path.join(image_dir, args.filename_prefix + "return_boxplot.svg"), dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # --------------- ymin绝对值对数箱线图/小提琴图 ---------------
+
     import pandas as pd
     eps = 1e-8
     log_abs_ymin_lqr = np.log10(np.abs(filtered_min_y_lqr) + eps)

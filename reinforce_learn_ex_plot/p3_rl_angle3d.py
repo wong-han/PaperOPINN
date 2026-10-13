@@ -17,7 +17,7 @@ from rl_training_recording import (
     synchronize_device,
 )
 
-# ================== 图像设置 =======================
+
 mpl.rcParams['font.family'] = 'Times New Roman'
 mpl.rcParams['text.usetex'] = False
 mpl.rcParams['axes.unicode_minus'] = False

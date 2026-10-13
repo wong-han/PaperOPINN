@@ -14,7 +14,7 @@ from utils import DroneVisualizer
 from parallel_ppo_training_common import train_parallel_ppo
 import cmaps
 
-# ================== 图像设置 =======================
+# Plot settings
 mpl.rcParams['font.family'] = 'Times New Roman'
 mpl.rcParams['text.usetex'] = False
 mpl.rcParams['axes.unicode_minus'] = False
@@ -135,7 +135,7 @@ def _train_rl_serial_legacy():
             
             action_np = action.cpu().numpy().flatten()
             
-            # 将网络输出的 [-1, 1] 动作映射到真实动作空间 [u_min, u_max]
+            # Action space
             u_min = env.action_space.low
             u_max = env.action_space.high
             scaled_action = action_np * (u_max - u_min) / 2.0 + (u_max + u_min) / 2.0

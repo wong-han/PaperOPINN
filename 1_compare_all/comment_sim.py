@@ -16,7 +16,7 @@ def process_unconstrained():
             start_sim = i
         elif 'df_box = pd.DataFrame({"Return": data_returns, "Controller": data_controllers})' in line:
             end_sim = i
-        elif '# =============== 自动保存绘图数据 ===============' in line:
+        elif '# =============== Save plotting data automatically ===============' in line:
             start_save = i
         elif 'print(f"All Monte Carlo simulation data successfully saved to {data_dir}/")' in line:
             end_save = i
@@ -57,11 +57,11 @@ def process_constrained():
             start_sim = i
         elif '"Controller": data_controllers_logy' in line:
             end_sim = i + 2 # include closing brace
-        elif '# =============== 自动保存绘图数据 ===============' in line:
+        elif '# =============== Save plotting data automatically ===============' in line:
             start_save = i
         elif 'print(f"All Monte Carlo simulation data successfully saved to {data_dir}/")' in line:
             end_save = i
-        elif '# 画 Return 箱线图' in line:
+        elif '# Plot the return box plot' in line:
             start_ret = i
         elif 'df_ret.to_csv' in line:
             end_ret = i

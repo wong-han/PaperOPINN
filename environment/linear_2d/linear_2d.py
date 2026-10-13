@@ -21,7 +21,7 @@ class Linear2D(gym.Env):
     def __init__(self, options={}):
         super().__init__()
         
-        # 模型设置
+        # Model setup
         self.system_torch_dynamics = SystemTorchDynamics(self.metadata)
         self.observation_space = spaces.Box(low=-5.0, high=5.0, shape=(self.metadata['nx'],), dtype=np.float64)
         self.action_space = spaces.Box(low=-10.0, high=10.0, shape=(self.metadata['nu'],), dtype=np.float64)
@@ -29,7 +29,7 @@ class Linear2D(gym.Env):
         # Default initial state; reset() uses the same [-4, 4] range.
         self.state = self.np_random.uniform(-4.0, 4.0, size=self.metadata['nx'])
 
-        # 模型参数
+        # Model parameters
         model_param = options.get('model_param')
         if model_param is None:
             a1 = self.metadata['a1']
@@ -58,7 +58,7 @@ class Linear2D(gym.Env):
         ])
         self.B_nominal = self.B
 
-        # 控制参数
+        # Control parameters
         control_param = options.get('control_param')
         if control_param is None:
             self.Q = self.metadata['Q']
@@ -67,14 +67,14 @@ class Linear2D(gym.Env):
             self.Q = control_param['Q']
             self.R = control_param['R']
 
-        # 仿真参数
+        # Simulation parameters
         # self.dt = 0.01
         self.dt = 0.1
         self.t = 0.0
         self.data = {}
-        self.T = 20.0  # 最大运行时间
+        self.T = 20.0  # Maximum episode duration
 
-        # 扰动设置
+        # Disturbance settings
         self.has_disturbed = False
         disturb_param = options.get('disturb_param')
         if disturb_param is not None:
@@ -83,7 +83,7 @@ class Linear2D(gym.Env):
         else:
             self.disturb_mode = None
 
-        # 跟踪模式
+
         self.track_mode = None
         self.state_d = np.zeros_like(self.state)
         self.u_d = np.zeros_like(self.np_random.uniform(self.action_space.low, self.action_space.high))
@@ -110,7 +110,7 @@ class Linear2D(gym.Env):
         self.t = 0.0
         self.data = {}
         super().reset(seed=seed)
-        # 初始状态
+        # Initial state
         if options is not None:
             init_state = options.get('init_state')
         else:
@@ -119,7 +119,7 @@ class Linear2D(gym.Env):
             self.state = init_state
         else:
             self.state = self.np_random.uniform(-4.0, 4.0, size=self.metadata['nx'])
-        # 模型参数
+        # Model parameters
         if options is not None:
             model_param = options.get('model_param')
         else:
@@ -139,7 +139,7 @@ class Linear2D(gym.Env):
                 [b1],
                 [b2]
             ])
-        # 控制参数
+        # Control parameters
         if options is not None:
             control_param = options.get('control_param')
         else:
@@ -148,7 +148,7 @@ class Linear2D(gym.Env):
             self.Q = control_param['Q']
             self.R = control_param['R']
 
-        # 扰动设置
+        # Disturbance settings
         if options is not None:
             self.disturb_param = options.get('disturb_param')
         else:
@@ -166,9 +166,9 @@ class Linear2D(gym.Env):
             return aug_state, self._get_info()
     
     def step(self, action):
-        # 将 action 限制在 action_space 的范围内
+        # Clip the action to the action-space bounds
         action = np.clip(action, self.action_space.low, self.action_space.high)
-        # 状态更新
+        # Update the state
         old_state = deepcopy(self.state)
         self.t = self.t + self.dt
         self.stata_d, self.u_d = self.set_state_d()
@@ -176,7 +176,7 @@ class Linear2D(gym.Env):
         if self.track_mode is None:
             dxdt = self.A @ self.state + self.B @ action + self.disturbance()
             self.state = self.state + dxdt * self.dt
-            # 奖励函数
+            # Reward function
             reward = -(self.state.T @ self.Q @ self.state + action.T @ self.R @ action) * self.dt
             if np.all(np.abs(self.state) < np.array([0.01, 0.01])):
                 terminated = True
@@ -186,7 +186,7 @@ class Linear2D(gym.Env):
             dxdt = self.A @ self.state + self.B @ (action + self.u_d) + self.disturbance()
             self.state = self.state + dxdt * self.dt
             delta_state = self.state - self.state_d
-            # 奖励函数
+            # Reward function
             reward = -(delta_state @ self.Q @ delta_state + action @ self.R @ action) * self.dt
             if np.all(np.abs(delta_state) < np.array([0.01, 0.01])):
                 terminated = True
@@ -202,7 +202,7 @@ class Linear2D(gym.Env):
             truncated = True
         else:
             truncated = False
-        # 信息
+        # Diagnostic information
         if 'state' not in self.data:
             self.data['state'] = [deepcopy(old_state)]
         else:
@@ -319,7 +319,7 @@ class SystemTorchDynamics(torch.nn.Module):
         ])
 
     def forward(self, x, u):
-        # 将A, B转为torch tensor（如果还没转的话），并确保和x, u的dtype/device一致
+
         A = torch.from_numpy(self.A).to(x.device).type(x.dtype)
         B = torch.from_numpy(self.B).to(x.device).type(x.dtype)
         # x: (N, nx), u: (N, nu)

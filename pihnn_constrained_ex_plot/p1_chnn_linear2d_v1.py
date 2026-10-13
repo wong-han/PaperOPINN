@@ -1,5 +1,5 @@
 '''
-状态约束积分系统
+State-constrained integrator system.
 '''
 import sys, os
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -15,46 +15,46 @@ import matplotlib as mpl
 import gymnasium as gym
 
 
-# ================== 图像设置 =======================
-mpl.rcParams['font.family'] = 'Times New Roman'  # 默认字体
-# mpl.rcParams['font.weight'] = 'bold'  # 加粗
-mpl.rcParams['text.usetex'] = False  # 使用TEX
-mpl.rcParams['axes.unicode_minus'] = False  # 解决无法显示负号
-mpl.rcParams['xtick.direction'] = 'in'  # x轴刻度线朝内
-mpl.rcParams['ytick.direction'] = 'in'  # y轴刻度线朝内
-mpl.rcParams['xtick.top'] = True  # 显示上方的坐标轴
-mpl.rcParams['ytick.right'] = True  # 显示右侧的坐标轴
+# Plot settings
+mpl.rcParams['font.family'] = 'Times New Roman'  # Default font
+# Bold font
+mpl.rcParams['text.usetex'] = False  # Use TeX rendering
+mpl.rcParams['axes.unicode_minus'] = False  # Render minus signs correctly
+mpl.rcParams['xtick.direction'] = 'in'  # Draw ticks inward
+mpl.rcParams['ytick.direction'] = 'in'  # Draw ticks inward
+mpl.rcParams['xtick.top'] = True  # Show top ticks
+mpl.rcParams['ytick.right'] = True  # Show right ticks
 
-mpl.rcParams['legend.frameon'] = False  # legend不显示边框
-mpl.rcParams['legend.fontsize'] = 24  # legend默认size
+mpl.rcParams['legend.frameon'] = False  # Hide the legend frame
+mpl.rcParams['legend.fontsize'] = 24  # Default legend font size
 
-mpl.rcParams['xtick.labelsize'] = 24  # x坐标默认size
-mpl.rcParams['ytick.labelsize'] = 24  # y坐标默认size
-mpl.rcParams['axes.labelsize'] = 24  # 轴标题默认size
-mpl.rcParams['lines.linewidth'] = 2  # 线条宽度
+mpl.rcParams['xtick.labelsize'] = 24  # Default tick-label size
+mpl.rcParams['ytick.labelsize'] = 24  # Default tick-label size
+mpl.rcParams['axes.labelsize'] = 24  # Default axis-label size
+mpl.rcParams['lines.linewidth'] = 2  # Line width
 mpl.rcParams['axes.grid'] = True
-mpl.rcParams['grid.linestyle'] = '--'  # 虚线
-mpl.rcParams['grid.alpha'] = 0.5       # 透明度
-mpl.rcParams['grid.color'] = 'gray'    # 网格颜色
+mpl.rcParams['grid.linestyle'] = '--'  # Dashed grid lines
+mpl.rcParams['grid.alpha'] = 0.5       # Transparency
+mpl.rcParams['grid.color'] = 'gray'    # Grid color
 
 
-# =================== 参数设置 ======================
+# Parameters
 class Args:
-    # 环境名称
+    # Environment identifier
     env_id = "environment:linear2d-v0"
-    # 学习率
+    # Learning rate
     learning_rate = 1e-3
-    # 总训练次数
+    # Total training iterations
     time_steps = 20000
-    # 训练批次
+    # Training batch size
     batch_size = 1280
-    # 是否使用GPU
+    # Select the compute device
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    # 文件名前缀
+    # Output filename prefix
     filename_prefix = "chnn_linear2d_"
 
 
-# 动力学相关
+# Dynamics
 def dynamics(X, U):
 
     # X: (batch_size, 2)
@@ -70,18 +70,18 @@ def dynamics(X, U):
     return fxu
 
 
-# 计算控制矩阵pfpu
+# Compute the control Jacobian
 def get_pfpu(X):
     # X: (batch_size, n)
     batch_size, n = X.shape
 
-    # 生成 batch_size 个 2x1 的列向量 B，每个都是 [0, 1]
+
     B = torch.tensor([[0.0], [1.0]], device=X.device, dtype=X.dtype).expand(batch_size, 2, 1)
     
     return B
 
 
-# 计算罚函数
+# Compute the penalty
 def get_penalty(X):
     # X: (batch_size, 2)
     x2 = X[:, 1]
@@ -91,7 +91,7 @@ def get_penalty(X):
     return p
 
 
-# 计算pPpx
+# Compute the penalty gradient
 def get_pPpx(X):
     X2 = X[:, 1]  # (batch_size,)
     pP1px = torch.zeros(X.shape[0], 2, dtype=X.dtype, device=X.device)  # (batch_size, 2)
@@ -106,7 +106,7 @@ class HNN(nn.Module):
         self.env = env.unwrapped if hasattr(env, 'unwrapped') else env
         super().__init__()
 
-        # 共享层
+        # Shared layers
         self.shared_net = nn.Sequential(
             layer_init(nn.Linear(env.observation_space.shape[0], 64)),
             nn.Tanh(),
@@ -186,7 +186,7 @@ class HNN(nn.Module):
     
     def get_pHpX(self, x):
         x = x.requires_grad_(True)
-        Lambda = self.get_lambda(x).detach()  # 切断Lambda对x的梯度连接
+        Lambda = self.get_lambda(x).detach()  # Detach the costate output from the state graph
         hamilton_input = torch.cat([x, Lambda], dim=-1)
         H = self.hamilton_part(hamilton_input).squeeze(-1)  # (batch,)
         grads = []
@@ -205,7 +205,7 @@ class HNN(nn.Module):
         
         pfpu = get_pfpu(X)  # (batch_size, 2, 1)
         
-        # 计算 u_star = -0.5 * inv(R) * pfpu.T * grad_V
+
         # R: numpy 1x1, pfpu: (batch_size, 2, 1), grad_V: (batch_size, 2)
         R_inv = torch.tensor(np.linalg.inv(R), dtype=X.dtype, device=X.device)  # (1, 1)
         pfpu_T = pfpu.transpose(1, 2)      # (batch_size, 1, 2)
@@ -222,7 +222,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
         return layer
 
 
-# 计算pVpx = lambda损失
+
 def value_lambda_loss(model, X):
     V = model.get_value(X).squeeze(-1)  # (batch,)
     grad_V = torch.autograd.grad(
@@ -236,16 +236,16 @@ def value_lambda_loss(model, X):
     return loss
 
 
-# 计算V > 0损失
+
 def positive_v_loss(model, X):
-    # 计算pinn对X的输出，要求输出大于0的loss
+
     V = model.get_value(X).squeeze(-1)  # (batch,)
-    # 只惩罚V<=0的部分
+
     loss = torch.relu(-V).mean()
     return loss
 
 
-# 计算x_dot = pHpLambda损失
+
 def dynamics_loss(model, X):
     u_star = model.get_action(X)
     fxu = dynamics(X, u_star)
@@ -254,7 +254,7 @@ def dynamics_loss(model, X):
     return loss
 
 
-# 计算lambda_dot = -pHpX损失
+
 def lambda_dot_loss(model, X):
     Q = model.env.Q
     Q_torch = torch.tensor(Q, dtype=X.dtype, device=X.device)
@@ -264,7 +264,7 @@ def lambda_dot_loss(model, X):
     Lambda = model.get_lambda(X)
     pHpX = model.get_pHpX(X)
 
-    # 计算 pHpX = 2*Q*X + pfpx^T * Lambda
+
     # X: (batch_size, 2)
     # Q_torch: (2,2)
     # pfpx: (2,2)
@@ -277,7 +277,7 @@ def lambda_dot_loss(model, X):
     Lambda_unsq = Lambda.unsqueeze(2)  # (batch_size, 2, 1)
     term2 = torch.matmul(pfpx_T, Lambda_unsq).squeeze(-1)  # (batch_size, 2)
     Lambda_dot = -(term1 + term2)  # (batch_size, 2)
-    loss = torch.nn.functional.mse_loss(-pHpX, Lambda_dot)  # 这里返回pHpX，实际损失在外部定义
+    loss = torch.nn.functional.mse_loss(-pHpX, Lambda_dot)  # Return the Hamiltonian gradient; the loss is assembled externally
     return loss
 
 
@@ -288,10 +288,10 @@ def hamiltonian_loss(model, X):
     u_star = model.get_action(X)
     grad_V = model.get_lambda(X)
 
-    # 计算 fxu
+
     fxu = dynamics(X, u_star)
 
-    # 计算 H_loss = x^T Q x + u_star^T R u_star + grad_V^T fxu
+
     # x: (batch_size, 2), Q: (2,2), u_star: (batch_size, 1), R: (1,1), grad_V: (batch_size, 2), fxu: (batch_size, 2)
     Q_torch = torch.tensor(Q, dtype=X.dtype, device=X.device)
     R_torch = torch.tensor(R, dtype=X.dtype, device=X.device)
@@ -305,7 +305,7 @@ def hamiltonian_loss(model, X):
     # grad_V^T fxu
     gradV_fxu = (grad_V * fxu).sum(dim=1)  # (batch_size,)
 
-    H = xQx + uRu + gradV_fxu  # 希望H=0
+    H = xQx + uRu + gradV_fxu  # The Hamiltonian residual should vanish
     H_loss = (H ** 2).mean()
     return H_loss
 
@@ -317,7 +317,7 @@ def direct_H_loss(model, X):
 
 
 def get_all_loss(model, X):
-    # 先把需要的量都算出来
+    # Compute the quantities required by the loss
     V = model.get_value(X)
     Lambda = model.get_lambda(X)
     Lambda_unsq = Lambda.unsqueeze(2)
@@ -360,19 +360,19 @@ def get_all_loss(model, X):
     u_star = -0.5 * torch.matmul(pfpu_T, Lambda_unsq)  # (batch_size, 1, 1)
     u_star = torch.matmul(R_inv, u_star.squeeze(-1).T).T  # (batch_size, 1)
 
-    # 再计算损失
-    # 1 pVpx = lambda损失
+    # Assemble the loss terms
+
     loss1 = torch.nn.functional.mse_loss(Lambda, pVpX)
     
-    # 2 V > 0损失
+
     loss2 = torch.relu(-V).mean()
 
-    # 3 x_dot = pHpLambda损失
+
     fxu = dynamics(X, u_star)
     fxu_detach = fxu.detach().clone()
     loss3 = torch.nn.functional.mse_loss(fxu_detach, pHpLambda)
 
-    # 4 lambda_dot = -pHpX损失
+
     Q = model.env.Q
     Q_torch = torch.tensor(Q, dtype=X.dtype, device=X.device)
     pfpx = torch.tensor([[0.0, 1.0], [0.0, 0.0]], dtype=X.dtype, device=X.device)
@@ -383,14 +383,14 @@ def get_all_loss(model, X):
     Lambda_dot = -(term1 + term2 + pPpx)  # (batch_size, 2)
     loss4 = torch.nn.functional.mse_loss(-pHpX, Lambda_dot)
 
-    # 5 H = 0损失
+
     xQx = torch.einsum('bi,ij,bj->b', X, Q_torch, X)  # (batch_size,)
     u_star_connect = u_star = -0.5 * torch.matmul(pfpu_T, Lambda_unsq)  # (batch_size, 1, 1)
     u_star_connect = torch.matmul(R_inv, u_star_connect.squeeze(-1).T).T  # (batch_size, 1)
     uRu = torch.einsum('bi,ij,bj->b', u_star_connect, R_torch, u_star_connect)  # (batch_size,)
     gradV_fxu = (Lambda * fxu).sum(dim=1)
     penalty = get_penalty(X)
-    H = xQx + uRu + gradV_fxu + penalty  # 希望H=0
+    H = xQx + uRu + gradV_fxu + penalty  # The Hamiltonian residual should vanish
     loss5 = (H ** 2).mean()
 
     return loss1 + loss2 + loss3 + loss4 + loss5
@@ -399,7 +399,7 @@ def get_all_loss(model, X):
 def lambda_zero_loss(model):
     zero_point = torch.zeros(1, model.env.observation_space.shape[0], device=next(model.parameters()).device)
     zero_point_Lambda = model.get_lambda(zero_point)
-    # 计算零点处Lambda对输入的导数
+    # Differentiate the costate output at the origin
     zero_point = zero_point.clone().detach().requires_grad_(True)
     Lambda = model.get_lambda(zero_point)  # (1, state_dim)
     grad_Lambda = []
@@ -428,13 +428,13 @@ def train_hnn():
     optimizer = optim.Adam(hnn.parameters(), lr=args.learning_rate)
 
     for step in range(args.time_steps):
-        # 采样数据
+        # Sample training data
         low = [-1.0, -0.49]
         high = [1.0, 0.49]
         x_batch = np.random.uniform(low, high, (args.batch_size, env.observation_space.shape[0]))
         X = torch.from_numpy(x_batch).float().to(args.device)
         X.requires_grad_(True)
-        # 计算损失函数
+        # Compute the loss
         # posi_v_loss = positive_v_loss(hnn, X)
         # v_lam_loss = value_lambda_loss(hnn, X)
         # # lam_zero_loss = lambda_zero_loss(pinn)
@@ -444,16 +444,16 @@ def train_hnn():
         # loss = posi_v_loss + v_lam_loss + dyn_loss + lam_dot_loss + H_loss
         loss = get_all_loss(hnn, X) + lambda_zero_loss(hnn)
 
-        # 更新参数
+        # Update model parameters
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
 
-        # 打印损失
+        # Report the loss
         if step % 100 == 0:
             print(f"Step {step+1}/{args.time_steps}, Loss: {loss.item():.6f}")
 
-        # 保存pinn模型到model文件夹
+        # Save the PINN checkpoint in the model directory
         if step > 1000 and (step % 5000 == 0 or step == (args.time_steps-1)):
             model_dir = "model"
             os.makedirs(model_dir, exist_ok=True)
@@ -464,7 +464,7 @@ def train_hnn():
 
 def plot_value():
     args = Args()
-    # 加载模型参数
+    # Load model parameters
     model_dir = "model"
     model_path = os.path.join(model_dir,  args.filename_prefix + "v1.pth")
     env = gym.make(args.env_id)
@@ -472,23 +472,23 @@ def plot_value():
     hnn.load_state_dict(torch.load(model_path, map_location="cpu"))
     hnn.eval()
 
-    # 构建网格
+    # Construct the evaluation grid
     x1 = np.linspace(-1, 1, 50)
     x2 = np.linspace(-1, 1, 50)
     X1, X2 = np.meshgrid(x1, x2)
     X_grid = np.stack([X1.ravel(), X2.ravel()], axis=1)
  
-    # HNN值函数
+
     X_tensor = torch.from_numpy(X_grid).float()
     with torch.no_grad():
         hnn_values = hnn.get_value(X_tensor).cpu().numpy()
     hnn_values = hnn_values.reshape(X1.shape)
 
-    # ========== 画 V(x) ===============
+
     from mpl_toolkits.mplot3d import Axes3D
     fig = plt.figure(figsize=(8, 6))
     ax = fig.add_subplot(111, projection='3d')
-    # 使用单色渐变: HNN用Blues
+
     surf1 = ax.plot_surface(
         X1, X2, hnn_values, cmap='RdBu_r', alpha=0.85, linewidth=0, antialiased=True, rstride=1, cstride=1
     )
@@ -505,28 +505,28 @@ def plot_value():
     filename = "image/" + args.filename_prefix + "value_function.png"
     # plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # ============== 画 V_dot ==============
-    # 参见 hnn_linear2d_v3.py 的计算方法
-    # 计算HNN值函数的V_dot = pVpx * f(x, u*), 其中u*用hnn-Lambda闭环控制
+
+
+
     X_tensor_vdot = torch.from_numpy(X_grid).float()
     X_tensor_vdot.requires_grad_(True)
     # Lambda = dV/dx (N,2)
     Lambda = hnn.get_lambda(X_tensor_vdot)  # (N,2)
-    # 线性系统: B= [[0],[1]], R=1
+
     B = torch.tensor([[0.0],[1.0]], dtype=X_tensor_vdot.dtype, device=X_tensor_vdot.device)
     R = torch.tensor([[1.0]], dtype=X_tensor_vdot.dtype, device=X_tensor_vdot.device)
-    # 最优闭环控制 u* = -R^{-1} B^T Lambda^T
+
     u_star = -torch.matmul(Lambda, B)  # (N,1)
-    # 动力学 (需定义 dynamics)
+
     fxu = dynamics(X_tensor_vdot, u_star)
-    # 对x求V的梯度
+
     V = hnn.get_value(X_tensor_vdot)
     V_sum = V.sum()
     pVpx = torch.autograd.grad(V_sum, X_tensor_vdot, create_graph=False)[0]  # (N,2)
-    # V_dot: 每个点pVpx * fxu 求和
+
     V_dot_hnn = (pVpx * fxu).sum(dim=1).reshape(X1.shape).detach().cpu().numpy()
 
-    # 画V_dot的等高线图
+    # Plot value-derivative contours
     fig2, ax2 = plt.subplots(figsize=(6,5))
     contour_vdot = ax2.contourf(X1, X2, V_dot_hnn, levels=30, cmap='RdBu_r', alpha=0.9)
     cbar = plt.colorbar(contour_vdot, ax=ax2)
@@ -539,7 +539,7 @@ def plot_value():
     filename = "image/" + args.filename_prefix + "vdot_contourf.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # 绘制HNN值函数的等高线（contourf）图
+
     fig3, ax3 = plt.subplots(figsize=(6,5))
     contour_hnn = ax3.contourf(X1, X2, hnn_values, levels=30, cmap='RdBu_r', vmin=0, vmax=6, alpha=0.9)
     cbar = plt.colorbar(contour_hnn, ax=ax3)
@@ -547,22 +547,22 @@ def plot_value():
     ax3.set_xlabel(r'$x_1$')
     ax3.set_ylabel(r'$x_2$')
     ax3.set_aspect('equal')
-    # 在x2=±0.5处画两条虚线
+    # Dashed grid lines
     ax3.axhline(0.5, color='k', linestyle='--', linewidth=2)
     ax3.axhline(-0.5, color='k', linestyle='--', linewidth=2)
     filename = "image/" + args.filename_prefix + "value_function_contourf.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # 绘制相轨迹图
-    # ----------- 相轨迹图（Phase Portrait）绘制 ---------------
-    # 构建稀疏网格用于画矢量场
+
+
+
     x1_lin = np.linspace(-1, 1, 25)
     x2_lin = np.linspace(-1, 1, 25)
     X1_grid, X2_grid = np.meshgrid(x1_lin, x2_lin)
     U = np.zeros_like(X1_grid)
     V = np.zeros_like(X2_grid)
 
-    # 计算每个网格点的闭环动力学（dx1/dt, dx2/dt），u* 由 CHNN Lambda 得到
+
     for i in range(X1_grid.shape[0]):
         for j in range(X1_grid.shape[1]):
             x_point = np.array([X1_grid[i, j], X2_grid[i, j]], dtype=np.float32)
@@ -573,15 +573,15 @@ def plot_value():
             R = np.array([[1.0]])
             u = -np.linalg.inv(R) @ B.T @ Lambda.reshape(-1, 1)
             u = u.squeeze()
-            # 系统动力学: dx/dt = Ax + Bu
+
             U[i, j] = x_point[1]
             V[i, j] = u
 
-    # 归一化用于着色
+
     speed = np.sqrt(U**2 + V**2)
-    # 绘制矢量场
+
     fig4, ax4 = plt.subplots(figsize=(6,5))
-    step = 2  # 每隔2个点画一次箭头
+    step = 2
     Q = ax4.quiver(
         X1_grid[::step, ::step], X2_grid[::step, ::step],
         U[::step, ::step], V[::step, ::step],
@@ -595,10 +595,10 @@ def plot_value():
     ax4.axhline(0.5, color='k', linestyle='--', linewidth=2)
     ax4.axhline(-0.5, color='k', linestyle='--', linewidth=2)
 
-    # 可以选画几条初始轨迹（仿真流线），如下为可选，注释掉即可
+
     from scipy.integrate import solve_ivp
-    # LQR参数
-    # P由理论求解(dx/dt = Ax+Bu, Q=I, R=I)
+
+
     P_lqr = np.array([[np.sqrt(3), 1.0], [1.0, np.sqrt(3)]])
     B_lqr = np.array([[0.0], [1.0]])
     R_lqr = np.array([[1.0]])
@@ -619,23 +619,23 @@ def plot_value():
         dx1 = x[1]
         dx2 = u
         return np.array([dx1, dx2])
-    # 两组初值
+
     x0_list = [[-0.9, -0.4], [0.9, 0.4], [-0.9, 0.4], [0.9, -0.4]]
     for x0 in x0_list:
-        # HNN仿真轨迹（红色）
+
         sol = solve_ivp(closed_loop_dynamics, [0, 8], x0, t_eval=np.linspace(0,8,200))
         ax4.plot(sol.y[0], sol.y[1], 'r-', lw=2, label="CHNN" if x0==x0_list[0] else "")
-        # # LQR仿真轨迹（灰色）
+
         # sol_lqr = solve_ivp(lqr_closed_loop_dynamics, [0, 8], x0, t_eval=np.linspace(0,8,200))
         # ax4.plot(sol_lqr.y[0], sol_lqr.y[1], color='gray', lw=2, linestyle='--', label="LQR" if x0==x0_list[0] else "")
-    # 初始点标记出来，使用散点
+
     x0_arr = np.array(x0_list)
     ax4.scatter(x0_arr[:, 0], x0_arr[:, 1], color='red', s=80, marker='o', edgecolors='k')
-    # # 添加图例只显示一次
+    # Legend
     # handles, labels = ax4.get_legend_handles_labels()
     # by_label = dict(zip(labels, handles))
     # ax4.legend(by_label.values(), by_label.keys(), loc='upper right')
-    # 原点用散点标出
+
     ax4.scatter([0], [0], color='blue', s=80, marker='o', edgecolors='k', zorder=10)
     filename = "image/" + args.filename_prefix + "phase_portrait.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
@@ -645,18 +645,18 @@ def plot_value():
 
 def simulate_once():
     """
-    加载训练好的HNN网络和环境，进行一次仿真，并画出状态和控制的时间曲线
-    同时加入LQR的理论轨迹用于对比
+    Load the trained OPINN and environment, run one simulation, and plot the state and control histories.
+    Include the theoretical LQR trajectory for comparison.
     """
     seed = 1318
-    # ============================== HNN 仿真 ==============================
-    # 加载环境
+
+    # Load the environment
     env = gym.make(Args.env_id)
     obs, _ = env.reset(seed=seed)
     obs = np.array(obs, dtype=np.float32)
     obs_hnn_init = obs.copy()
 
-    # 加载网络
+    # Load the network
     hnn = HNN(env)
     model_path = "model/" + args.filename_prefix + "v1.pth"
     if os.path.exists(model_path):
@@ -668,24 +668,24 @@ def simulate_once():
     hnn.to(Args.device)
     hnn.eval()
 
-    # 仿真参数
+    # Simulation parameters
     T = 200
     state_traj_hnn = [obs.copy()]
     control_traj_hnn = []
     time_traj = [0.0]
 
-    # 记录HNN轨迹
+
     for t in range(T):
         x_tensor = torch.from_numpy(obs).float().unsqueeze(0).to(Args.device)
         with torch.no_grad():
             Lambda = hnn.get_lambda(x_tensor).cpu().numpy().squeeze()
-        # 线性系统参数
+
         B = np.array([[0], [1]])
         R = np.diag([1])
-        # 最优控制律 u* = -R^{-1} B^T Lambda
+
         u = -np.linalg.inv(R) @ B.T @ Lambda.reshape(-1, 1)
         u = u.squeeze()
-        # 状态更新通过环境
+        # Update the state
         obs, _, terminated, truncated, _ = env.step(u)
         obs = np.array(obs, dtype=np.float32)
         state_traj_hnn.append(obs.copy())
@@ -697,19 +697,19 @@ def simulate_once():
     control_traj_hnn = np.array(control_traj_hnn)
     time_traj = np.array(time_traj)
 
-    # ============================== LQR 理论仿真 ==============================
-    # 理论LQR的参数
+
+
     P = np.array([[np.sqrt(3), 1.0], [1.0, np.sqrt(3)]])
     K = np.linalg.inv(np.diag([1])) @ np.array([[0, 1]]) @ P  # K shape (1,2)
     K = K.squeeze()  # shape (2,), K = [K1, K2]
-    # 环境初始化
+
     env_lqr = gym.make(Args.env_id)
     obs, _ = env_lqr.reset(seed=seed)
     obs = np.array(obs, dtype=np.float32)
     state_traj_lqr = [obs.copy()]
     control_traj_lqr = []
     for t in range(T):
-        # LQR控制律 u* = -K x
+
         u_lqr = -K @ obs
         u_lqr_scalar = np.array(u_lqr).squeeze()
         obs, _, terminated, truncated, _ = env_lqr.step(u_lqr_scalar)
@@ -719,11 +719,11 @@ def simulate_once():
     state_traj_lqr = np.array(state_traj_lqr)
     control_traj_lqr = np.array(control_traj_lqr)
 
-    # ============================== 绘图 ==============================
+
     fig, axs = plt.subplots(3, 1, figsize=(8, 8), sharex=True)
 
-    # 定义更优雅的蓝色（不纯蓝），比如tab:blue + LQR橙色为tab:orange
-    hnn_color = '#1f77b4'  # matplotlib tab:blue (稍带青色)
+
+    hnn_color = '#1f77b4'
     lqr_color = '#ff7f0e'  # matplotlib tab:orange
 
     # x1

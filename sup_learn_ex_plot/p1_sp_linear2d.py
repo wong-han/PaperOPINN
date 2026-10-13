@@ -11,45 +11,45 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import gymnasium as gym
 
-# ================== 图像设置 =======================
-mpl.rcParams['font.family'] = 'Times New Roman'  # 默认字体
-# mpl.rcParams['font.weight'] = 'bold'  # 加粗
-mpl.rcParams['text.usetex'] = True  # 是否使用tex渲染
-mpl.rcParams['axes.unicode_minus'] = False  # 解决无法显示负号
-mpl.rcParams['xtick.direction'] = 'in'  # x轴刻度线朝内
-mpl.rcParams['ytick.direction'] = 'in'  # y轴刻度线朝内
-mpl.rcParams['xtick.top'] = True  # 显示上方的坐标轴
-mpl.rcParams['ytick.right'] = True  # 显示右侧的坐标轴
+# Plot settings
+mpl.rcParams['font.family'] = 'Times New Roman'  # Default font
+# Bold font
+mpl.rcParams['text.usetex'] = True  # Enable TeX rendering
+mpl.rcParams['axes.unicode_minus'] = False  # Render minus signs correctly
+mpl.rcParams['xtick.direction'] = 'in'  # Draw ticks inward
+mpl.rcParams['ytick.direction'] = 'in'  # Draw ticks inward
+mpl.rcParams['xtick.top'] = True  # Show top ticks
+mpl.rcParams['ytick.right'] = True  # Show right ticks
 
-mpl.rcParams['legend.frameon'] = False  # legend不显示边框
-mpl.rcParams['legend.fontsize'] = 24  # legend默认size
+mpl.rcParams['legend.frameon'] = False  # Hide the legend frame
+mpl.rcParams['legend.fontsize'] = 24  # Default legend font size
 
-mpl.rcParams['xtick.labelsize'] = 24  # x坐标默认size
-mpl.rcParams['ytick.labelsize'] = 24  # y坐标默认size
-mpl.rcParams['axes.labelsize'] = 24  # 轴标题默认size
-mpl.rcParams['lines.linewidth'] = 2  # 线条宽度
+mpl.rcParams['xtick.labelsize'] = 24  # Default tick-label size
+mpl.rcParams['ytick.labelsize'] = 24  # Default tick-label size
+mpl.rcParams['axes.labelsize'] = 24  # Default axis-label size
+mpl.rcParams['lines.linewidth'] = 2  # Line width
 mpl.rcParams['axes.grid'] = True
-mpl.rcParams['grid.linestyle'] = '--'  # 虚线
-mpl.rcParams['grid.alpha'] = 0.5       # 透明度
-mpl.rcParams['grid.color'] = 'gray'    # 网格颜色
+mpl.rcParams['grid.linestyle'] = '--'  # Dashed grid lines
+mpl.rcParams['grid.alpha'] = 0.5       # Transparency
+mpl.rcParams['grid.color'] = 'gray'    # Grid color
 
-# =================== 参数设置 ======================
+# Parameters
 class Args:
-    # 环境名称
+    # Environment identifier
     env_id = "environment:linear2d-v0"
-    # 学习率
+    # Learning rate
     learning_rate = 1e-3
-    # 总训练次数
+    # Total training iterations
     time_steps = 20000
-    # 训练批次
+    # Training batch size
     batch_size = 2048
-    # 是否使用GPU
+    # Select the compute device
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    # 文件名前缀
+    # Output filename prefix
     filename_prefix = "sp_linear2d_"
 
 
-# 动力学相关
+# Dynamics
 def dynamics(X, U):
     # X: (batch_size, 2)
     # U: (batch_size, 1) or (batch_size,)
@@ -74,7 +74,7 @@ class SPNet(nn.Module):
     def __init__(self, env):
         self.env = env.unwrapped if hasattr(env, 'unwrapped') else env
         super().__init__()
-        # 仅学习从状态 x 到控制量 u 的映射
+
         self.net = nn.Sequential(
             layer_init(nn.Linear(env.observation_space.shape[0], 64)),
             nn.Tanh(),
@@ -92,7 +92,7 @@ def train_sp():
     model = SPNet(env).to(Args.device)
     optimizer = optim.Adam(model.parameters(), lr=Args.learning_rate)
 
-    # 线性系统最优值函数矩阵 P
+
     P = np.array([[np.sqrt(3), 1.0], [1.0, np.sqrt(3)]])
     P_torch = torch.tensor(P, dtype=torch.float32, device=Args.device)
     B_torch = torch.tensor([[0.0], [1.0]], dtype=torch.float32, device=Args.device)
@@ -101,33 +101,33 @@ def train_sp():
     # print(f"Training started at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
 
     for step in range(Args.time_steps):
-        # 采样数据
+        # Sample training data
         low = -4.0
         high = 4.0
         x_batch = np.random.uniform(low, high, (Args.batch_size, env.observation_space.shape[0]))
         X = torch.from_numpy(x_batch).float().to(Args.device)
 
-        # ================== 生成数据 =======================
-        # 最优控制量 u* = - R^{-1} B^T P x (R=1) => u* = - B^T P x
-        # 注意: torch.matmul(X, P_torch) 等价于 (P x)^T，再乘以 B 等价于 x^T P B
+        # Generate training data
+
+
         u_star = -torch.matmul(torch.matmul(X, P_torch), B_torch)
 
-        # ================== 训练最优控制器 ==================
+        # Train the optimal controller
         u_pred = model(X)
 
-        # 监督学习：直接拟合最优控制量
+
         loss = torch.nn.functional.mse_loss(u_pred, u_star)
 
-        # 更新参数
+        # Update model parameters
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-        # 打印损失
+        # Report the loss
         if step % 100 == 0:
             print(f"Step {step+1}/{Args.time_steps}, Loss: {loss.item():.6f}")
 
-        # 保存模型
+        # Save the model
         if step > 1000 and (step % 5000 == 0 or step == (Args.time_steps-1)):
             model_dir = "model"
             os.makedirs(model_dir, exist_ok=True)
@@ -136,7 +136,7 @@ def train_sp():
             print(f"SP model saved to {model_path}")
 
 
-# ================== 在网格化场景下测试值函数与画图 ==================
+
 def plot_value():
     model_dir = "model"
     model_path = os.path.join(model_dir, "sp_linear2d.pth")
@@ -150,7 +150,7 @@ def plot_value():
         print(f"Model file {model_path} not found. Running with untrained model.")
     model.eval()
 
-    # 构建网格
+    # Construct the evaluation grid
     x1 = np.linspace(-3, 3, 50)
     x2 = np.linspace(-3, 3, 50)
     X1, X2 = np.meshgrid(x1, x2)
@@ -158,10 +158,10 @@ def plot_value():
 
     X_tensor = torch.from_numpy(X_grid).float().to(Args.device)
 
-    # ------------------ 通过网格化测试获取SP值函数 ------------------
-    # 由于SP网络只输出 u，其值函数需要通过仿真积分获得 V(x) = \int (x^TQx + u^TRu) dt
+
+
     dt = 0.05
-    T_steps = 400  # 仿真20秒，足够收敛到原点附近
+    T_steps = 400
     V_sp = torch.zeros(X_tensor.shape[0], device=Args.device)
     curr_x = X_tensor.clone()
     
@@ -172,11 +172,11 @@ def plot_value():
     with torch.no_grad():
         for _ in range(T_steps):
             u = model(curr_x)
-            # 累加 cost
+
             cost = torch.sum(curr_x * (curr_x @ Q), dim=1, keepdim=True) + torch.sum(u * (u @ R), dim=1, keepdim=True)
             V_sp += cost.squeeze() * dt
             
-            # RK4 积分动力学
+
             k1 = dynamics(curr_x, u)
             x2_rk = curr_x + 0.5 * dt * k1
             u2 = model(x2_rk)
@@ -192,8 +192,8 @@ def plot_value():
 
     sp_values = V_sp.cpu().numpy().reshape(X1.shape)
     
-    # ------------------ 计算 SP 值函数的时间导数 \dot{V} ------------------
-    # 对仿真得到的值函数网格进行数值求导
+
+
     dx1 = x1[1] - x1[0]
     dx2 = x2[1] - x2[0]
     dV_dx2, dV_dx1 = np.gradient(sp_values, dx2, dx1)
@@ -207,22 +207,22 @@ def plot_value():
     fxu_x2 = fxu_grid[:, 1].reshape(X1.shape)
     V_dot_sp = dV_dx1 * fxu_x1 + dV_dx2 * fxu_x2
 
-    # LQR值函数: V(x) = x^T P x, 其中P=[[sqrt(3), 1],[1, sqrt(3)]]
+
     P = np.array([[np.sqrt(3), 1.0], [1.0, np.sqrt(3)]])
     lqr_values = np.einsum('ij,jk,ik->i', X_grid, P, X_grid).reshape(X1.shape)
-    # 计算LQR值函数的V_dot = (2*P*x)^T * f(x, u)
+
     # u_star_lqr = -0.5*R^{-1} B^T (2Px)
     X_grid_torch = torch.from_numpy(X_grid).float()
     P_torch = torch.from_numpy(P).float()
     B_lqr = torch.tensor([[0.0], [1.0]])
     R_inv_lqr = torch.tensor([[1.0]])
     gradV_lqr = 2 * torch.matmul(X_grid_torch, P_torch)  # (N,2)
-    # 计算lqr闭环控制
+
     u_star_lqr = -0.5*torch.matmul(gradV_lqr, B_lqr)  # (N,1)
     fxu_lqr = dynamics(X_grid_torch, u_star_lqr)
     V_dot_lqr = (gradV_lqr * fxu_lqr).sum(dim=1).reshape(X1.shape).detach().numpy()
 
-    # 绘制对比曲面
+    # Plot the comparison surfaces
     from mpl_toolkits.mplot3d import Axes3D
     import matplotlib.gridspec as gridspec
 
@@ -252,7 +252,7 @@ def plot_value():
     ax2.set_xlim([-3, 3])
     ax2.set_ylim([-3, 3])
     
-    # 相轨迹图
+
     x1_lin = np.linspace(-3, 3, 25)
     x2_lin = np.linspace(-3, 3, 25)
     X1_grid, X2_grid = np.meshgrid(x1_lin, x2_lin)
@@ -289,7 +289,7 @@ def plot_value():
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
 
-    # 画V的等高线图
+    # Plot value-function contours
     fig3 = plt.figure(figsize=(6,5))
     ax3 = fig3.add_subplot(111, projection='3d')
     z_min = min(np.min(sp_values), np.min(sp_values))
@@ -301,7 +301,7 @@ def plot_value():
     filename = "image/" + args.filename_prefix + "sp_value.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # 单独画对比曲面（图1第一个子图的单独版）
+
     fig2_standalone = plt.figure(figsize=(6,5))
     ax2_3d = fig2_standalone.add_subplot(111, projection='3d')
     surf_fig2_1 = ax2_3d.plot_surface(
@@ -326,7 +326,7 @@ def plot_value():
     filename2 = "image/" + args.filename_prefix + "value_function_3d_standalone.svg"
     plt.savefig(filename2, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # 画V_dot的等高线图
+    # Plot value-derivative contours
     fig4 = plt.figure(figsize=(6,5))
     ax4 = fig4.add_subplot(111, projection='3d')
     z_min = min(np.min(V_dot_sp), np.min(V_dot_sp))
@@ -338,7 +338,7 @@ def plot_value():
     filename = "image/" + args.filename_prefix + "sp_value_dot.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # 单独画相轨迹图
+    # Plot the phase portrait
     fig5 = plt.figure(figsize=(6,5))
     ax5 = fig5.add_subplot(111)
     Q_quiver2 = ax5.quiver(
@@ -359,7 +359,7 @@ def plot_value():
 
 def simulate_once():
     """
-    加载训练好的SP网络和环境，进行一次仿真，并画出状态和控制的时间曲线
+    Load the trained supervised policy and environment, run one simulation, and plot the state and control histories.
     """
     env = gym.make(Args.env_id)
     obs, _ = env.reset(seed=1318)
@@ -416,7 +416,7 @@ def simulate_once():
 
 if __name__ == "__main__":
     args = Args()
-    # 训练模型请取消注释下面一行
+    # Uncomment the following line to train the model
     train_sp()
     plot_value()
     # simulate_once()

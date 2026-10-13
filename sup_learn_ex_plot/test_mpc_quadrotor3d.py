@@ -14,7 +14,7 @@ from p4_sp_quadrotor3d_TR import setup_casadi_mpc, N
 def test_mpc():
     env = gym.make("environment:quadrotor3d_TR-v0").unwrapped
     
-    # 随机初始化
+
     init_state = np.random.uniform(-1.0, 1.0, 9)
     state, _ = env.reset(theoretic_mode=True, options={'init_state': init_state})
     
@@ -65,13 +65,13 @@ def test_mpc():
         print("MPC failed immediately.")
         return
 
-    # 绘图
+
     time_steps = np.arange(len(x_traj)) * env.dt
     time_steps_u = np.arange(len(u_traj)) * env.dt
     
     plt.figure(figsize=(12, 10))
     
-    # 位置
+
     plt.subplot(3, 1, 1)
     plt.plot(time_steps, x_traj[:, 0], label='x')
     plt.plot(time_steps, x_traj[:, 1], label='y')
@@ -80,7 +80,7 @@ def test_mpc():
     plt.legend()
     plt.grid(True)
     
-    # 姿态
+
     plt.subplot(3, 1, 2)
     plt.plot(time_steps, x_traj[:, 6], label='phi')
     plt.plot(time_steps, x_traj[:, 7], label='theta')
@@ -89,7 +89,7 @@ def test_mpc():
     plt.legend()
     plt.grid(True)
     
-    # 控制输入
+
     plt.subplot(3, 1, 3)
     plt.plot(time_steps_u, u_traj[:, 0], label='Thrust (T)')
     plt.plot(time_steps_u, u_traj[:, 1], label='p')

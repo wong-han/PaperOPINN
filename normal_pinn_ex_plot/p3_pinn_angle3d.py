@@ -1,10 +1,11 @@
 '''
-使用 Furfaro et al. (2022) 论文中的 X-TFC (Extreme Theory of Functional Connections) PINN 方法
-解决 3D 姿态角非线性最优控制问题的 HJB 方程。
-核心改动：
-1. 使用 ELM (随机固定隐藏层参数，仅训练输出权重 \beta)。
-2. 构造 Constraint Expression (CE): V(x) = g(x) - g(0)，解析满足 V(0) = 0 边界条件。
-3. 采用二次 LQR 函数进行 \beta 的 Least-Squares 热启动初始化，避免非线性 HJB 梯度发散。
+Implement the X-TFC (Extreme Theory of Functional Connections) PINN method of Furfaro et al. (2022).
+Solve the HJB equation for the nonlinear three-dimensional attitude-control problem.
+Key implementation details:
+1. Use an ELM with fixed random hidden-layer parameters and train only the output weights ``beta``.
+2. Construct the constrained expression ``V(x) = g(x) - g(0)`` so that ``V(0) = 0`` holds analytically.
+3. Warm-start ``beta`` with a least-squares fit to the quadratic LQR value function to prevent
+   gradient divergence in the nonlinear HJB residual.
 '''
 import sys, os
 import time
@@ -21,7 +22,7 @@ import gymnasium as gym
 from sup_angle3d import PINNNetwork
 
 
-# ================== 图像设置 =======================
+# Plot settings
 mpl.rcParams['font.family'] = 'Times New Roman'
 mpl.rcParams['text.usetex'] = False
 mpl.rcParams['axes.unicode_minus'] = False
@@ -43,15 +44,15 @@ mpl.rcParams['grid.alpha'] = 0.5
 mpl.rcParams['grid.color'] = 'gray'
 
 
-# =================== 参数设置 ======================
+# Parameters
 class Args:
-    # 随机种子
+    # Random seed
     seed = 42
     env_id = "environment:angle3d-v0"
-    learning_rate = 1  # X-TFC 使用 L-BFGS 或快速 Adam，学习率可放大
-    time_steps = 10000     # ELM 收敛极大加速，无需 10000 步
-    batch_size = 512     # 配点数量 (Collocation points)
-    hidden_dim = 400      # 论文推荐 X-TFC 隐藏节点数 100~800
+    learning_rate = 1  # Learning rate
+    time_steps = 10000
+    batch_size = 512
+    hidden_dim = 400
     device = "cuda" if torch.cuda.is_available() else "cpu"
     filename_prefix = "xtfc_angle3d_"
 
@@ -71,7 +72,7 @@ def set_seed(seed=42):
 
 
 
-# 动力学相关
+# Dynamics
 def dynamics(X, U):
     phi = X[:, 0:1]
     theta = X[:, 1:2]
@@ -116,7 +117,7 @@ def get_pfpu(X):
 
 
 # =====================================================================
-# X-TFC (Extreme Theory of Functional Connections) PINN 架构
+
 # =====================================================================
 class XTFC_PINN(nn.Module):
     def __init__(self, env, hidden_dim=400):
@@ -125,24 +126,24 @@ class XTFC_PINN(nn.Module):
         self.state_dim = env.observation_space.shape[0]
         self.hidden_dim = hidden_dim
 
-        # 1. ELM 随机初始化隐藏层权重并冻结 (不参与梯度更新)
-        # 使用 normal 或 uniform 映射到合适的非线性区间
+        # Hidden layers
+
         self.W = nn.Parameter(torch.randn(hidden_dim, self.state_dim) * 1.5, requires_grad=False)
         self.b = nn.Parameter(torch.randn(hidden_dim) * 1.5, requires_grad=False)
 
-        # 2. 唯一可训练参数：线性输出权重 \beta
+
         self.beta = nn.Parameter(torch.zeros(hidden_dim, 1, requires_grad=True))
 
-        # 激活函数采用论文经典推荐：Tanh
+
         self.act = torch.tanh
 
     def _get_H(self, x):
-        """计算 ELM 隐藏层特征矩阵 H(x) = tanh(X W^T + b)"""
+        """Compute the ELM hidden-feature matrix H(x) = tanh(X W^T + b)."""
         return self.act(torch.matmul(x, self.W.t()) + self.b)
 
     def get_value(self, x):
         """
-        通过 TFC Constraint Expression 解析满足 V(0) = 0:
+        Use the TFC constrained expression to satisfy V(0) = 0 analytically:
         V_CE(x) = g(x) - g(0) = (H(x) - H(0)) * \beta
         """
         H_x = self._get_H(x)
@@ -152,8 +153,8 @@ class XTFC_PINN(nn.Module):
 
     def get_lambda(self, x):
         """
-        计算协状态 \Lambda = \nabla V(x)。
-        利用 ELM 结构进行解析快速求导 (极大地节约计算图开销并提升精度)：
+        Compute the costate \Lambda = \nabla V(x).
+        Use the ELM structure for efficient analytical differentiation:
         d/dx_i [tanh(Z)] = (1 - tanh^2(Z)) * W[:, i]
         """
         Z = torch.matmul(x, self.W.t()) + self.b
@@ -162,7 +163,7 @@ class XTFC_PINN(nn.Module):
 
         grads = []
         for i in range(self.state_dim):
-            # 对每一维状态求偏导
+
             dH_dxi = dH * self.W[:, i].unsqueeze(0)  # (batch_size, hidden_dim)
             dV_dxi = torch.matmul(dH_dxi, self.beta) # (batch_size, 1)
             grads.append(dV_dxi)
@@ -171,7 +172,7 @@ class XTFC_PINN(nn.Module):
         return Lambda
 
     def get_action(self, X):
-        """通过最优控制律公式求解 u^* = -0.5 * R^{-1} * G(X)^T * \Lambda"""
+        """Evaluate u^* = -0.5 * R^{-1} * G(X)^T * \Lambda from the optimal control law."""
         R = self.env.R
         Lambda = self.get_lambda(X).unsqueeze(2)  # (batch_size, 3, 1)
         pfpu = get_pfpu(X)                        # (batch_size, 3, 3)
@@ -185,21 +186,21 @@ class XTFC_PINN(nn.Module):
 
     def warm_start_lqr(self, X_sample):
         """
-        论文 IV.A/IV.B 核心技巧：利用 LQR 二次函数 V_guess = X^T Q X 对 \beta 进行 Least-Squares 预训练，
-        提供高质量初始猜测，防止 HJB 非线性项导数发散。
+        Use the quadratic LQR function V_guess = X^T Q X to warm-start \beta by least squares, following Sections IV.A--IV.B.
+        This provides a high-quality initial guess and prevents divergence of nonlinear HJB derivatives.
         """
         with torch.no_grad():
             Q_np = self.env.Q
             Q_torch = torch.tensor(Q_np, dtype=X_sample.dtype, device=X_sample.device)
-            # 目标猜测值 V_guess
+
             V_guess = torch.einsum('bi,ij,bj->b', X_sample, Q_torch, X_sample).unsqueeze(1)
             
-            # 线性方程组 A * \beta = Y
+
             H_x = self._get_H(X_sample)
             H_0 = self._get_H(torch.zeros_like(X_sample))
             A = H_x - H_0
             
-            # 最小二乘求解 \beta
+
             beta_init = torch.linalg.lstsq(A, V_guess).solution
             self.beta.data.copy_(beta_init)
             print("X-TFC: Warm-start LQR initialization completed via Least-Squares.")
@@ -207,9 +208,9 @@ class XTFC_PINN(nn.Module):
 
 def get_hjb_residual_loss(model, X):
     """
-    计算 HJB PDE 残差损失 (论文 Eq. 7 & Eq. 28)
+    Compute the HJB PDE residual loss (Eqs. 7 and 28 of the reference).
     H(X, \Lambda) = L(X, u^*) + \Lambda^T f(X, u^*) = 0
-    由于 TFC 已经解析满足了 V(0)=0，此处绝对不需要添加边界条件损失！
+    Because the TFC expression satisfies V(0)=0 analytically, no additional boundary-condition loss is required.
     """
     Lambda = model.get_lambda(X)
     u_star = model.get_action(X)
@@ -217,18 +218,18 @@ def get_hjb_residual_loss(model, X):
     Q_torch = torch.tensor(model.env.Q, dtype=X.dtype, device=X.device)
     R_torch = torch.tensor(model.env.R, dtype=X.dtype, device=X.device)
     
-    # 运行成本 L(X, u) = X^T Q X + u^T R u
+
     xQx = torch.einsum('bi,ij,bj->b', X, Q_torch, X)
     uRu = torch.einsum('bi,ij,bj->b', u_star, R_torch, u_star)
     
-    # 动力学项 \Lambda^T \dot{X}
+
     fxu = dynamics(X, u_star)
     lambda_fxu = (Lambda * fxu).sum(dim=1)
     
-    # HJB 残差 H = 0
+
     H_residual = xQx + uRu + lambda_fxu
     
-    # X-TFC 损失函数只需最小化 HJB 均方残差
+
     loss = (H_residual ** 2).mean()
     return loss
 
@@ -242,16 +243,16 @@ def train_xtfc(seed=None):
     env = gym.make(args.env_id).unwrapped
     xtfc = XTFC_PINN(env, hidden_dim=args.hidden_dim).to(args.device)
 
-    # 采样均匀分布的训练配点 (Collocation Points)
+
     low, high = -1.1, 1.1
     x_batch = np.random.uniform(low, high, (args.batch_size, env.observation_space.shape[0]))
     X_train = torch.from_numpy(x_batch).float().to(args.device)
 
-    # 1. 执行 Least-Squares 热启动
+
     xtfc.warm_start_lqr(X_train)
 
-    # 2. 使用 L-BFGS (拟牛顿迭代最小二乘法) 或 Adam 优化唯一变量 \beta
-    # 论文指出 X-TFC 的参数呈线性化特征，迭代收敛极快
+
+
     optimizer = optim.LBFGS([xtfc.beta], lr=args.learning_rate, max_iter=20, history_size=50, line_search_fn="strong_wolfe")
     
     start_time = time.time()
@@ -259,7 +260,7 @@ def train_xtfc(seed=None):
     for step in range(args.time_steps):
         def closure():
             optimizer.zero_grad()
-            # 为防止过拟合固定网格，每步微调重采样一部分点
+
             x_rand = np.random.uniform(low, high, (args.batch_size, env.observation_space.shape[0]))
             X_curr = torch.from_numpy(x_rand).float().to(args.device)
             loss = get_hjb_residual_loss(xtfc, X_curr)
@@ -274,7 +275,7 @@ def train_xtfc(seed=None):
     end_time = time.time()
     print(f"Training completed. Total training time: {end_time - start_time:.2f} seconds.")
 
-    # 保存 X-TFC 模型参数
+    # Model parameters
     model_dir = "model"
     os.makedirs(model_dir, exist_ok=True)
     model_path = os.path.join(model_dir, "xtfc_angle3d.pth")
@@ -283,7 +284,7 @@ def train_xtfc(seed=None):
 
 
 # =====================================================================
-# 可视化与对比测试函数 (保持原有评估流程，无缝替换模型)
+
 # =====================================================================
 def plot_value():
     model_dir = "model"

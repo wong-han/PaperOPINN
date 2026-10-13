@@ -1,6 +1,6 @@
 '''
-使用 Furfaro et al. (2022) 论文中的 X-TFC (Extreme Theory of Functional Connections) PINN 方法
-解决 3D Quadrotor 非线性最优控制问题的 HJB 方程。
+Implement the X-TFC (Extreme Theory of Functional Connections) PINN method of Furfaro et al. (2022).
+Solve the HJB equation for the nonlinear three-dimensional quadrotor problem.
 '''
 import sys, os
 import time
@@ -19,7 +19,7 @@ from utils import DroneVisualizer
 import pandas as pd
 import seaborn as sns
 
-# ================== 图像设置 =======================
+# Plot settings
 mpl.rcParams['font.family'] = 'Times New Roman'
 mpl.rcParams['text.usetex'] = False
 mpl.rcParams['axes.unicode_minus'] = False
@@ -40,7 +40,7 @@ mpl.rcParams['grid.linestyle'] = '--'
 mpl.rcParams['grid.alpha'] = 0.5
 mpl.rcParams['grid.color'] = 'gray'
 
-# =================== 参数设置 ======================
+# Parameters
 class Args:
     env_id = "environment:quadrotor3d_TR-v0"
     learning_rate = 1e-3  
@@ -54,7 +54,7 @@ _env_tmp = gym.make(Args.env_id)
 m = _env_tmp.metadata['m']
 g = _env_tmp.metadata['g']
 
-# 动力学相关
+# Dynamics
 def dynamics(X, U):
     x = X[:, 0]
     y = X[:, 1]
@@ -118,7 +118,7 @@ def get_pfpu(X):
 
 
 # =====================================================================
-# X-TFC (Extreme Theory of Functional Connections) PINN 架构
+
 # =====================================================================
 class XTFC_PINN(nn.Module):
     def __init__(self, env, hidden_dim=400):
@@ -250,12 +250,12 @@ def train_xtfc():
 
 
 def simulate_once():
-    # 仿真LQR和X-TFC PINN控制效果
+    # Simulate LQR and X-TFC PINN closed-loop control
     args = Args()
     device = args.device
     env_probe = gym.make(args.env_id, theoretic_mode=True)
 
-    # 仿真参数
+    # Simulation parameters
     horizon = int(env_probe.T / env_probe.dt)
     A_np = env_probe.A
     B_np = env_probe.B
@@ -265,7 +265,7 @@ def simulate_once():
     g = env_probe.metadata['g']
     u0 = env_probe.u0
 
-    # 计算LQR控制器
+    # Compute the LQR controller
     P = solve_continuous_are(A_np, B_np, Q_np, R_np)
     K = np.linalg.inv(R_np) @ B_np.T @ P
     def lqr_action(x_np):
@@ -273,14 +273,14 @@ def simulate_once():
         u = np.clip(u, env_probe.action_space.low, env_probe.action_space.high)
         return np.array(u, dtype=np.float32)
 
-    # 加载X-TFC模型
+
     xtfc_path = "model/xtfc_quadrotor3d.pth"
     env_xtfc = gym.make(args.env_id, theoretic_mode=True)
     xtfc_model = XTFC_PINN(env_xtfc, hidden_dim=args.hidden_dim).to(device)
     xtfc_model.load_state_dict(torch.load(xtfc_path, map_location=device))
     xtfc_model.eval()
 
-    # X-TFC控制器
+
     def xtfc_action(x_np):
         x = torch.from_numpy(x_np).float().unsqueeze(0).to(device)
         with torch.no_grad():
@@ -288,12 +288,12 @@ def simulate_once():
         u = np.clip(u, env_probe.action_space.low, env_probe.action_space.high)
         return np.array(u, dtype=np.float32)
 
-    # 初始化环境
+    # Initialize the environments
     seed = np.random.randint(0, 10000000)
     env_lqr = gym.make(args.env_id, theoretic_mode=True)
     obs_lqr, _ = env_lqr.reset(seed=seed)
     env_xtfc_sim = gym.make(args.env_id, theoretic_mode=True)
-    obs_xtfc, _ = env_xtfc_sim.reset(seed=seed)  # 用同一个初始条件
+    obs_xtfc, _ = env_xtfc_sim.reset(seed=seed)  # Use the same initial condition
 
     ret_lqr = 0.0
     u_seq_lqr = []
@@ -334,7 +334,7 @@ def simulate_once():
     traj_u_xtfc = np.vstack(u_seq_xtfc)
     traj_x_xtfc = np.vstack(x_seq_xtfc)
 
-    # 绘制控制输入轨迹
+    # Plot control trajectories
     time_u = np.arange(horizon)
     plt.figure(figsize=(12, 6))
     for i in range(4):
@@ -347,7 +347,7 @@ def simulate_once():
     plt.grid(True, linestyle='--', alpha=0.4)
     plt.tight_layout()
 
-    # 绘制状态轨迹
+    # Plot state trajectories
     time_x = np.arange(horizon + 1)
     fig, axs = plt.subplots(9, 1, figsize=(12, 14), sharex=True)
     for i, ax in enumerate(axs):
@@ -362,12 +362,12 @@ def simulate_once():
     fig.suptitle("State trajectories (single episode)")
     plt.tight_layout()
 
-    # 打印回报
+    # Report returns
     print("Single episode return:")
     print(f"LQR: {ret_lqr:.3f}")
     print(f"X-TFC: {ret_xtfc:.3f}")
 
-    # 绘制无人机三维轨迹
+
     import cmaps
     cmap_xtfc = cmaps.MPL_PuOr_r
     cmap_lqr = cmaps.MPL_RdYlGn_r
@@ -377,15 +377,15 @@ def simulate_once():
     drone_visualizer.ax.set_zlim([-1, 1])
     plt.savefig('image/quad_traj_single_xtfc.svg', dpi=600, bbox_inches='tight', pad_inches=0.5, transparent=True)
 
-    # 控制量轨迹（使用nature配色和风格，所有episode透明叠加线）
+    # Control trajectories
     control_labels = ['$T$\,(N)', '$p$\,(rad/s)', '$q$\,(rad/s)', '$r$\,(rad/s)']
     nature_green = "#389826"   # LQR
     nature_purple = "#4B8BBE"  # X-TFC
     fig, axs = plt.subplots(4, 1, figsize=(6, 6.3), sharex=True)
     for i, ax in enumerate(axs):
-        # 画LQR（绿色），单条
+
         ax.plot(time_u[:], traj_u_lqr[:, i], color=nature_green, alpha=0.6, linewidth=3, label="LQR" if i==0 else "")
-        # 画X-TFC（蓝色/紫色），单条
+
         ax.plot(time_u[:], traj_u_xtfc[:, i], color=nature_purple, alpha=0.8, linewidth=3, label="X-TFC" if i==0 else "")
         ax.set_ylabel(control_labels[i])
         ax.grid(True, linestyle='--', alpha=0.36)
@@ -487,7 +487,7 @@ def monte_carlo_simulation():
     env_lqr.close()
     env_xtfc.close()
     
-    # 绘图部分使用 HNN 相同的风格
+
     control_labels = [r'$T$', r'$p$', r'$q$', r'$r$']
     time_u = np.arange(horizon)
 
@@ -497,7 +497,7 @@ def monte_carlo_simulation():
     image_dir = "image"
     os.makedirs(image_dir, exist_ok=True)
     
-    # 画所有回合的控制曲线叠加图
+
     fig, axs = plt.subplots(4, 1, figsize=(6, 6.3), sharex=True)
     for i, ax in enumerate(axs):
         for ep in range(num_episodes):
@@ -515,7 +515,7 @@ def monte_carlo_simulation():
     filename = "image/" + args.filename_prefix + "control_traj.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
     
-    # 画控制曲线单回合(如第一回合)
+
     fig, axs = plt.subplots(4, 1, figsize=(6, 6.3), sharex=True)
     for i, ax in enumerate(axs):
         ax.plot(time_u*env_lqr.dt, all_traj_u_lqr[0][:, i], color=nature_green, alpha=0.8, linewidth=3, linestyle='--', label="LQR" if i==0 else "")
@@ -528,7 +528,7 @@ def monte_carlo_simulation():
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5, transparent=True)
 
 
-    # ========== 箱线图及小提琴图统计 ==========
+
     final_dist_lqr = np.array([np.linalg.norm(traj[-1, 0:3]) for traj in all_traj_x_lqr])
     final_dist_xtfc = np.array([np.linalg.norm(traj[-1, 0:3]) for traj in all_traj_x_xtfc])
     success_mask_lqr = final_dist_lqr <= 0.1
@@ -537,7 +537,7 @@ def monte_carlo_simulation():
     filtered_returns_lqr = np.array(returns_lqr)[success_mask_lqr]
     filtered_returns_xtfc = np.array(returns_xtfc)[success_mask_xtfc]
 
-    # ==== 数据准备 ====
+
     df_box = pd.DataFrame({
         "Return": np.concatenate((-filtered_returns_lqr, -filtered_returns_xtfc)),
         "Controller": ["LQR"]*len(filtered_returns_lqr) + ["X-TFC"]*len(filtered_returns_xtfc)

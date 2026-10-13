@@ -14,7 +14,7 @@ from utils import DroneVisualizer
 from parallel_ppo_training_common import train_parallel_ppo
 import cmaps
 
-# ================== 图像设置 =======================
+# Plot settings
 mpl.rcParams['font.family'] = 'Times New Roman'
 mpl.rcParams['text.usetex'] = False
 mpl.rcParams['axes.unicode_minus'] = False
@@ -135,7 +135,7 @@ def _train_rl_serial_legacy():
             
             action_np = action.cpu().numpy().flatten()
             
-            # 将网络输出的 [-1, 1] 动作映射到真实动作空间 [u_min, u_max]
+            # Action space
             u_min = env.action_space.low
             u_max = env.action_space.high
             scaled_action = action_np * (u_max - u_min) / 2.0 + (u_max + u_min) / 2.0
@@ -672,7 +672,7 @@ def monte_carlo_simulation():
     if hnn_loaded:
         env_hnn.close()
 
-    # ========== 计算成功率并过滤发散轨迹 ==========
+    # Compute success rates and remove divergent trajectories
     final_dist_lqr = np.array([np.linalg.norm(traj[-1, 0:3]) for traj in all_traj_x_lqr])
     final_dist_rl = np.array([np.linalg.norm(traj[-1, 0:3]) for traj in all_traj_x_rl])
     if sp_loaded:
@@ -680,7 +680,7 @@ def monte_carlo_simulation():
     if hnn_loaded:
         final_dist_hnn = np.array([np.linalg.norm(traj[-1, 0:3]) for traj in all_traj_x_hnn])
         
-    # 认为 距离 > 0.1 为失败
+    # Treat terminal distances above 0.1 as failures
     success_mask_lqr = final_dist_lqr <= 0.2
     success_mask_rl = final_dist_rl <= 0.2
     if sp_loaded:

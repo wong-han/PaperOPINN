@@ -21,26 +21,26 @@ class Pendulum(gym.Env):
     def __init__(self, options={}, theoretic_mode=False):
         super().__init__()
 
-        # 模型设置
+        # Model setup
         self.system_torch_dynamics = SystemTorchDynamics(self.metadata)
-        # 状态空间: [theta, theta_dot]
+        # State space
         self.state_low = np.array([-np.pi, -80])
         self.state_high = np.array([np.pi, 80])
         self.observation_space = spaces.Box(low=self.state_low, high=self.state_high, shape=(self.metadata['nx'],), dtype=np.float64)
-        # 动作空间: [u]
+        # Action space
         u_max = 1.8
         self.u_min = np.array([-u_max])
         self.u_max = np.array([u_max])
         self.action_space = spaces.Box(low=self.u_min, high=self.u_max, shape=(self.metadata['nu'],), dtype=np.float64)
 
-        # 在observation_space范围内随机生成一个状态
-        self.state = 1.0 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
-        self.state[1] = 0.0  # 初始角速度为0
 
-        # 模型参数
+        self.state = 1.0 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
+        self.state[1] = 0.0  # Initialize angular velocity to zero
+
+        # Model parameters
         self.A, self.B = linearize_at_origin(self.metadata)
 
-        # 控制参数
+        # Control parameters
         self.u0 = np.array([0.0])
         control_param = options.get('control_param')
         if control_param is None:
@@ -52,14 +52,14 @@ class Pendulum(gym.Env):
 
         self.P = scipy.linalg.solve_continuous_are(self.A, self.B, self.Q, self.R)
 
-        # 仿真参数
+        # Simulation parameters
         self.dt = 0.001
         self.t = 0.0
         self.data = {}
-        self.T = 5.0  # 最大运行时间
+        self.T = 5.0  # Maximum episode duration
         self.theoretic_mode = theoretic_mode
 
-        # 扰动设置
+        # Disturbance settings
         self.has_disturbed = False
         disturb_param = options.get('disturb_param')
         if disturb_param is not None:
@@ -78,7 +78,7 @@ class Pendulum(gym.Env):
 
     def reset(self, seed=None, options={}):
         super().reset(seed=seed)
-        # 初始状态
+        # Initial state
         if options is not None:
             init_state = options.get('init_state')
         else:
@@ -91,7 +91,7 @@ class Pendulum(gym.Env):
             # self.state[0] = 0.3
         self.t = 0.0
         self.data = {}
-        # 控制参数
+        # Control parameters
         if options is not None:
             control_param = options.get('control_param')
         else:
@@ -100,7 +100,7 @@ class Pendulum(gym.Env):
             self.Q = control_param['Q']
             self.R = control_param['R']
 
-        # 扰动设置
+        # Disturbance settings
         if options is not None:
             self.disturb_param = options.get('disturb_param')
         else:
@@ -114,16 +114,16 @@ class Pendulum(gym.Env):
         return self._get_obs(), self._get_info()
 
     def step(self, action):
-        # 将 action 限制在 action_space 的范围内
+        # Clip the action to the action-space bounds
         action = np.clip(action, self.action_space.low, self.action_space.high)
-        # 状态更新（倒立摆非线性系统）
+        # Update the state
         old_state = deepcopy(self.state)
         dxdt = self._nonlinear_dynamics_np(self.state, action) + self.disturbance()
         self.state = self.state + dxdt * self.dt
-        # 保证角度theta在[-pi, pi]范围内
+
         self.state[0] = (self.state[0] + np.pi) % (2 * np.pi) - np.pi
         self.t = self.t + self.dt
-        # 奖励函数
+        # Reward function
         delta_action = action - self.u0
         reward = -(self.state.T @ self.Q @ self.state + delta_action.T @ self.R @ delta_action) * self.dt + 100 * self.dt * (1 - self.theoretic_mode)
         if np.all(np.abs(self.state) < np.array([0.01, 0.01])):
@@ -140,7 +140,7 @@ class Pendulum(gym.Env):
             truncated = True
         else:
             truncated = False
-        # 信息
+        # Diagnostic information
         if 'state' not in self.data:
             self.data['state'] = [deepcopy(old_state)]
         else:
@@ -231,9 +231,9 @@ class SystemTorchDynamics(torch.nn.Module):
 
 def linearize_at_origin(metadata):
     """
-    计算动力学模型在零点（x=0, u=0）的线性化矩阵A和B (使用 SymPy 计算)
-    :param metadata: 环境参数字典
-    :return: 数值矩阵A, B
+    Compute the linearized A and B matrices at x=0 and u=0 using SymPy.
+    :param metadata: Environment-parameter dictionary.
+    :return: Numerical matrices A and B.
     """
     theta, theta_dot, u_val = sp.symbols('theta theta_dot u_val')
     m = metadata['m']

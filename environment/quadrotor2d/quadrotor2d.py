@@ -19,7 +19,7 @@ class Quadrotor2D(gym.Env):
     def __init__(self, options={}, theoretic_mode=False):
         super().__init__()
         
-        # 模型设置
+
         self.system_torch_dynamics = SystemTorchDynamics(self.metadata)
         state_low = np.array([-2, -2, -1.5, -10, -10, -10])
         state_high = np.array([2, 2, 1.5, 10, 10, 10])
@@ -27,11 +27,11 @@ class Quadrotor2D(gym.Env):
         u_max = 2.5 * self.metadata['m'] * self.metadata['g'] / 2
         self.action_space = spaces.Box(low=0, high=u_max, shape=(self.metadata['nu'],), dtype=np.float64)
 
-        # 在observation_space范围内随机生成一个状态
+
         self.state = 0.8 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
         self.state[3:] = 0.0
 
-        # 模型参数
+
         self.u0 = 0.5 * self.metadata['m'] * self.metadata['g']
         self.A = np.zeros([self.metadata['nx'], self.metadata['nx']])
         self.A[0:3, 3:6] = np.eye(3)
@@ -41,7 +41,7 @@ class Quadrotor2D(gym.Env):
         self.B[5, 0] = self.metadata['r'] / self.metadata['I']
         self.B[5, 1] = -self.metadata['r'] / self.metadata['I']
 
-        # 控制参数（仍然使用单位阵）
+
         control_param = options.get('control_param')
         if control_param is None:
             self.Q = self.metadata['Q']
@@ -50,14 +50,14 @@ class Quadrotor2D(gym.Env):
             self.Q = control_param['Q']
             self.R = control_param['R']
 
-        # 仿真参数
+
         self.dt = 0.01
         self.t = 0.0
         self.data = {}
-        self.T = 8.0  # 最大运行时间
+        self.T = 8.0
         self.theoretic_mode = theoretic_mode
 
-        # 扰动设置
+
         self.has_disturbed = False
         disturb_param = options.get('disturb_param')
         if disturb_param is not None:
@@ -76,7 +76,7 @@ class Quadrotor2D(gym.Env):
 
     def reset(self, seed=None, options={}):
         super().reset(seed=seed)
-        # 初始状态
+
         if options is not None:
             init_state = options.get('init_state')
         else:
@@ -92,7 +92,7 @@ class Quadrotor2D(gym.Env):
             # self.state[2] = 0.0
         self.t = 0.0
         self.data = {}
-        # 控制参数
+
         if options is not None:
             control_param = options.get('control_param')
         else:
@@ -101,7 +101,7 @@ class Quadrotor2D(gym.Env):
             self.Q = control_param['Q']
             self.R = control_param['R']
 
-        # 扰动设置
+
         if options is not None:
             self.disturb_param = options.get('disturb_param')
         else:
@@ -115,14 +115,14 @@ class Quadrotor2D(gym.Env):
         return self._get_obs(), self._get_info()
     
     def step(self, action):
-        # 将 action 限制在 action_space 的范围内
+
         action = np.clip(action, self.action_space.low, self.action_space.high)
-        # 状态更新（使用非线性系统）
+
         old_state = deepcopy(self.state)
         dxdt = self._nonlinear_dynamics_np(self.state, action) + self.disturbance()
         self.state = self.state + dxdt * self.dt
         self.t = self.t + self.dt
-        # 奖励函数（Q, R为单位阵）
+
         delta_acion = action - self.u0
         reward = -(self.state.T @ self.Q @ self.state + delta_acion.T @ self.R @ delta_acion) * self.dt + 10 * self.dt * (1 - self.theoretic_mode)
         if np.all(np.abs(self.state) < np.array([0.01, 0.01, 0.01, 0.01, 0.01, 0.01])):
@@ -142,7 +142,7 @@ class Quadrotor2D(gym.Env):
             truncated = True
         else:
             truncated = False
-        # 信息
+
         if 'state' not in self.data:
             self.data['state'] = [deepcopy(old_state)]
         else:
@@ -193,12 +193,12 @@ class Quadrotor2D(gym.Env):
         return disturbance
         
     def disturb_once(self):
-        # 非线性系统不再支持对A, B参数的扰动；此处保留接口但不修改系统参数
+
         if self.has_disturbed == True:
             return
         self.has_disturbed = True
         if self.disturb_mode in ['ParamBias', 'OppositeB']:
-            # 对于这些模式，在非线性系统中无操作
+
             pass
 
     def render(self):

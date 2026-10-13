@@ -16,7 +16,7 @@ import gymnasium as gym
 from scipy.linalg import solve_continuous_are
 from supervised_training_common import train_from_saved_trajectories
 
-# ================== 图像设置 =======================
+
 mpl.rcParams['font.family'] = 'Times New Roman'
 mpl.rcParams['text.usetex'] = False
 mpl.rcParams['axes.unicode_minus'] = False
@@ -37,7 +37,7 @@ mpl.rcParams['grid.color'] = 'gray'
 
 class Args:
     env_id = "environment:quadrotor3d_TR_constrained"
-    # SIREN 网络对学习率非常敏感，默认 1e-3 容易导致梯度爆炸或 Loss 震荡不降，改为 1e-4
+
     learning_rate = 1e-4
     device = "cuda" if torch.cuda.is_available() else "cpu"
     filename_prefix = "siren_quadrotor3d_constrained_"
@@ -84,8 +84,8 @@ class SPNet(nn.Module):
     def __init__(self, env):
         self.env = env.unwrapped if hasattr(env, 'unwrapped') else env
         super().__init__()
-        # 控制策略函数通常比较平滑，SIREN 默认的 omega_0=30 频率太高容易拟合出剧烈震荡的无效策略
-        # 我们把 omega_0 降为 10（甚至 5）以匹配控制任务的平滑特性，大幅提高拟合精度。
+
+
         self.net = SIREN(in_features=9, out_features=4, hidden_features=64, hidden_layers=3, norm_scale=1.0, omega_0=10)
 
     def forward(self, x):
@@ -270,13 +270,13 @@ def monte_carlo_simulation():
     if hnn_loaded:
         env_hnn.close()
 
-    # ========== 计算成功率并过滤发散轨迹 ==========
+
     final_dist_lqr = np.array([np.linalg.norm(traj[-1, 0:3]) for traj in all_traj_x_lqr])
     final_dist_sp = np.array([np.linalg.norm(traj[-1, 0:3]) for traj in all_traj_x_sp])
     if hnn_loaded:
         final_dist_hnn = np.array([np.linalg.norm(traj[-1, 0:3]) for traj in all_traj_x_hnn])
         
-    # 认为 距离 > 0.1 为失败
+
     success_mask_lqr = final_dist_lqr <= MONTE_CARLO_SUCCESS_TOL
     success_mask_sp = final_dist_sp <= MONTE_CARLO_SUCCESS_TOL
     if hnn_loaded:
@@ -364,7 +364,7 @@ def monte_carlo_simulation():
     if hnn_loaded:
         print(f"HNN: mean={np.mean(filtered_returns_hnn):.3f}, std={np.std(filtered_returns_hnn):.3f}")
 
-    # 最小y统计
+
     min_y_lqr = np.array([np.min(traj[:, 1]) for traj in all_traj_x_lqr])
     min_y_sp = np.array([np.min(traj[:, 1]) for traj in all_traj_x_sp])
     if hnn_loaded:
@@ -457,7 +457,7 @@ def monte_carlo_simulation():
     capprops = dict(linewidth=1.5, color='k')
     flierprops = dict(marker='o', markerfacecolor='#ff7f0e', markersize=7, linestyle='none', alpha=0.3, markeredgecolor='k')
 
-    # --------------- 回报箱线图 ---------------
+
     fig, ax = plt.subplots(figsize=(6, 8))
     bp = ax.boxplot(
         data_to_plot_J,
@@ -484,7 +484,7 @@ def monte_carlo_simulation():
     sns.despine(top=False, right=False, left=False, bottom=False, ax=ax)
     plt.savefig(os.path.join(image_dir, args.filename_prefix + "return_boxplot.svg"), dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # --------------- ymin绝对值对数箱线图/小提琴图 ---------------
+
     import pandas as pd
     eps = 1e-8
     log_abs_ymin_lqr = np.log10(np.abs(filtered_min_y_lqr) + eps)

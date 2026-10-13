@@ -16,7 +16,7 @@ import gymnasium as gym
 from scipy.linalg import solve_continuous_are
 from supervised_training_common import train_from_saved_trajectories
 
-# ================== 图像设置 =======================
+
 mpl.rcParams['font.family'] = 'Times New Roman'
 mpl.rcParams['text.usetex'] = False
 mpl.rcParams['axes.unicode_minus'] = False
@@ -37,7 +37,7 @@ mpl.rcParams['grid.color'] = 'gray'
 
 class Args:
     env_id = "environment:quadrotor3d_TR-v0"
-    # SIREN 网络对学习率非常敏感，默认 1e-3 容易导致梯度爆炸或 Loss 震荡不降，改为 1e-4
+
     learning_rate = 1e-4
     device = "cuda" if torch.cuda.is_available() else "cpu"
     filename_prefix = "siren_quadrotor3d_"
@@ -84,8 +84,8 @@ class SPNet(nn.Module):
     def __init__(self, env):
         self.env = env.unwrapped if hasattr(env, 'unwrapped') else env
         super().__init__()
-        # 控制策略函数通常比较平滑，SIREN 默认的 omega_0=30 频率太高容易拟合出剧烈震荡的无效策略
-        # 我们把 omega_0 降为 10（甚至 5）以匹配控制任务的平滑特性，大幅提高拟合精度。
+
+
         self.net = SIREN(in_features=9, out_features=4, hidden_features=64, hidden_layers=3, norm_scale=1.0, omega_0=10)
 
     def forward(self, x):

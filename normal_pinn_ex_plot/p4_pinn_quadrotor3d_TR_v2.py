@@ -1,7 +1,7 @@
 '''
-使用 Furfaro et al. (2022) 论文中的 X-TFC (Extreme Theory of Functional Connections) PINN 方法
-解决 3D Quadrotor 非线性最优控制问题的 HJB 方程。
-（已修复 L-BFGS 闭包随机性、激活饱和与采样空间问题）
+Implement the X-TFC (Extreme Theory of Functional Connections) PINN method of Furfaro et al. (2022).
+Solve the HJB equation for the nonlinear three-dimensional quadrotor problem.
+The implementation handles L-BFGS closure determinism, activation saturation, and sampling-domain issues.
 '''
 import sys, os
 import time
@@ -20,7 +20,7 @@ from utils import DroneVisualizer
 import pandas as pd
 import seaborn as sns
 
-# ================== 图像设置 =======================
+# Plot settings
 mpl.rcParams['font.family'] = 'Times New Roman'
 mpl.rcParams['text.usetex'] = False
 mpl.rcParams['axes.unicode_minus'] = False
@@ -41,13 +41,13 @@ mpl.rcParams['grid.linestyle'] = '--'
 mpl.rcParams['grid.alpha'] = 0.5
 mpl.rcParams['grid.color'] = 'gray'
 
-# =================== 参数设置 ======================
+# Parameters
 class Args:
     env_id = "environment:quadrotor3d_TR-v0"
-    learning_rate = 1.0    # L-BFGS 默认学习率
-    epochs = 2000          # 训练 Epoch 数（每次重采样一个新的Batch）
-    batch_size = 1280      # 增大 Batch Size 覆盖 9 维空间
-    hidden_dim = 500      # 增加隐藏层节点容量，提升高维函数拟合能力
+    learning_rate = 1.0    # Learning rate
+    epochs = 2000
+    batch_size = 1280
+    hidden_dim = 500      # Hidden layers
     device = "cuda" if torch.cuda.is_available() else "cpu"
     filename_prefix = "xtfc_quadrotor3d_"
 
@@ -55,7 +55,7 @@ _env_tmp = gym.make(Args.env_id)
 m = _env_tmp.metadata['m']
 g = _env_tmp.metadata['g']
 
-# 动力学相关
+# Dynamics
 def dynamics(X, U):
     vx = X[:, 3]
     vy = X[:, 4]
@@ -116,7 +116,7 @@ def get_pfpu(X):
 
 
 # =====================================================================
-# X-TFC (Extreme Theory of Functional Connections) PINN 架构
+
 # =====================================================================
 class XTFC_PINN(nn.Module):
     def __init__(self, env, hidden_dim=1000):
@@ -125,7 +125,7 @@ class XTFC_PINN(nn.Module):
         self.state_dim = env.observation_space.shape[0]
         self.hidden_dim = hidden_dim
 
-        # 【修改点 1】：缩放系数从 1.5 降至 0.6，防止 tanh 激活函数进入饱和区导致 dH -> 0
+
         self.W = nn.Parameter(torch.randn(hidden_dim, self.state_dim) * 0.6, requires_grad=False)
         self.b = nn.Parameter(torch.randn(hidden_dim) * 0.6, requires_grad=False)
         self.beta = nn.Parameter(torch.zeros(hidden_dim, 1, requires_grad=True))
@@ -209,14 +209,14 @@ def get_hjb_residual_loss(model, X):
 
 def sample_training_data(batch_size, state_dim, low=-1.0, high=1.0):
     """
-    【修改点 2】：混合采样策略
-    一半数据进行均匀全局探索，另一半数据围绕原点（平衡位置）高斯分布采样。
-    强化重点区域（控制目标点附近）的拟合精度。
+    Hybrid sampling strategy:
+    Sample half of the points uniformly over the global domain and half from a Gaussian distribution around the equilibrium.
+    This improves approximation accuracy near the control target.
     """
     half_bs = batch_size // 2
-    # 均匀分布采样
+
     x_uniform = np.random.uniform(low, high, (half_bs, state_dim))
-    # 正态分布采样（集中在 0 附近，标准差设为 0.35）
+
     x_normal = np.random.normal(loc=0.0, scale=0.35, size=(batch_size - half_bs, state_dim))
     x_normal = np.clip(x_normal, low, high)
     
@@ -232,16 +232,16 @@ def train_xtfc():
 
     low, high = -1.0, 1.0
     
-    # 初始 LQR Warm Start
+
     x_init = sample_training_data(args.batch_size * 2, state_dim, low, high)
     X_train_init = torch.from_numpy(x_init).float().to(args.device)
     xtfc.warm_start_lqr(X_train_init)
 
-    # L-BFGS 优化器
+
     optimizer = optim.LBFGS(
         [xtfc.beta], 
         lr=args.learning_rate, 
-        max_iter=20,          # 单次 step 最多执行的迭代数
+        max_iter=20,
         max_eval=25, 
         history_size=50, 
         line_search_fn="strong_wolfe"
@@ -255,8 +255,8 @@ def train_xtfc():
             print(f"Time limit of 300s reached at epoch {epoch}. Stopping training.")
             break
             
-        # 【修改点 3】：在 closure 外部生成当前 Epoch 的固定数据集！
-        # L-BFGS 计算二阶导数近似时，必须保证目标函数在闭包执行期间保持绝对静态。
+
+
         x_rand = sample_training_data(args.batch_size, state_dim, low, high)
         X_curr = torch.from_numpy(x_rand).float().to(args.device)
 
@@ -266,7 +266,7 @@ def train_xtfc():
             loss.backward()
             return loss
 
-        # 执行固定 Batch 下的拟牛顿法优化
+
         loss = optimizer.step(closure)
         
         if epoch % 10 == 0:
@@ -280,12 +280,12 @@ def train_xtfc():
 
 
 def simulate_once():
-    # 仿真LQR和X-TFC PINN控制效果
+    # Simulate LQR and X-TFC PINN closed-loop control
     args = Args()
     device = args.device
     env_probe = gym.make(args.env_id, theoretic_mode=True)
 
-    # 仿真参数
+    # Simulation parameters
     horizon = int(env_probe.T / env_probe.dt)
     A_np = env_probe.A
     B_np = env_probe.B
@@ -293,7 +293,7 @@ def simulate_once():
     R_np = env_probe.R
     u0 = env_probe.u0
 
-    # 计算LQR控制器
+    # Compute the LQR controller
     P = solve_continuous_are(A_np, B_np, Q_np, R_np)
     K = np.linalg.inv(R_np) @ B_np.T @ P
     def lqr_action(x_np):
@@ -301,14 +301,14 @@ def simulate_once():
         u = np.clip(u, env_probe.action_space.low, env_probe.action_space.high)
         return np.array(u, dtype=np.float32)
 
-    # 加载X-TFC模型
+
     xtfc_path = "model/xtfc_quadrotor3d.pth"
     env_xtfc = gym.make(args.env_id, theoretic_mode=True)
     xtfc_model = XTFC_PINN(env_xtfc, hidden_dim=args.hidden_dim).to(device)
     xtfc_model.load_state_dict(torch.load(xtfc_path, map_location=device))
     xtfc_model.eval()
 
-    # X-TFC控制器
+
     def xtfc_action(x_np):
         x = torch.from_numpy(x_np).float().unsqueeze(0).to(device)
         with torch.no_grad():
@@ -316,12 +316,12 @@ def simulate_once():
         u = np.clip(u, env_probe.action_space.low, env_probe.action_space.high)
         return np.array(u, dtype=np.float32)
 
-    # 初始化环境
+    # Initialize the environments
     seed = np.random.randint(0, 10000000)
     env_lqr = gym.make(args.env_id, theoretic_mode=True)
     obs_lqr, _ = env_lqr.reset(seed=seed)
     env_xtfc_sim = gym.make(args.env_id, theoretic_mode=True)
-    obs_xtfc, _ = env_xtfc_sim.reset(seed=seed)  # 用同一个初始条件
+    obs_xtfc, _ = env_xtfc_sim.reset(seed=seed)  # Use the same initial condition
 
     ret_lqr = 0.0
     u_seq_lqr = []
@@ -361,7 +361,7 @@ def simulate_once():
     traj_u_xtfc = np.vstack(u_seq_xtfc)
     traj_x_xtfc = np.vstack(x_seq_xtfc)
 
-    # 绘制控制输入轨迹
+    # Plot control trajectories
     time_u = np.arange(horizon)
     plt.figure(figsize=(12, 6))
     for i in range(4):
@@ -374,7 +374,7 @@ def simulate_once():
     plt.grid(True, linestyle='--', alpha=0.4)
     plt.tight_layout()
 
-    # 绘制状态轨迹
+    # Plot state trajectories
     time_x = np.arange(horizon + 1)
     fig, axs = plt.subplots(9, 1, figsize=(12, 14), sharex=True)
     for i, ax in enumerate(axs):
@@ -389,13 +389,13 @@ def simulate_once():
     fig.suptitle("State trajectories (single episode)")
     plt.tight_layout()
 
-    # 打印回报
+    # Report returns
     print("Single episode return:")
     print(f"LQR: {ret_lqr:.3f}")
     print(f"X-TFC: {ret_xtfc:.3f}")
 
     os.makedirs('image', exist_ok=True)
-    # 绘制无人机三维轨迹
+
     try:
         import cmaps
         cmap_xtfc = cmaps.MPL_PuOr_r
@@ -406,9 +406,9 @@ def simulate_once():
         drone_visualizer.ax.set_zlim([-1, 1])
         plt.savefig('image/quad_traj_single_xtfc.svg', dpi=600, bbox_inches='tight', pad_inches=0.5, transparent=True)
     except Exception as e:
-        print(f"跳过 3D 轨迹绘制: {e}")
+        print(f"Skipping 3D trajectory plot: {e}")
 
-    # 控制量轨迹
+    # Control trajectories
     control_labels = ['$T$\,(N)', '$p$\,(rad/s)', '$q$\,(rad/s)', '$r$\,(rad/s)']
     nature_green = "#389826"   # LQR
     nature_purple = "#4B8BBE"  # X-TFC
@@ -525,7 +525,7 @@ def monte_carlo_simulation():
     image_dir = "image"
     os.makedirs(image_dir, exist_ok=True)
     
-    # 画所有回合的控制曲线叠加图
+
     fig, axs = plt.subplots(4, 1, figsize=(6, 6.3), sharex=True)
     for i, ax in enumerate(axs):
         for ep in range(num_episodes):
@@ -543,7 +543,7 @@ def monte_carlo_simulation():
     filename = "image/" + args.filename_prefix + "control_traj.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
     
-    # 画控制曲线单回合(第一回合)
+
     fig, axs = plt.subplots(4, 1, figsize=(6, 6.3), sharex=True)
     for i, ax in enumerate(axs):
         ax.plot(time_u*env_lqr.dt, all_traj_u_lqr[0][:, i], color=nature_green, alpha=0.8, linewidth=3, linestyle='--', label="LQR" if i==0 else "")
@@ -555,7 +555,7 @@ def monte_carlo_simulation():
     filename = "image/" + args.filename_prefix + "control_traj_single.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5, transparent=True)
 
-    # ========== 箱线图及小提琴图统计 ==========
+
     final_dist_lqr = np.array([np.linalg.norm(traj[-1, 0:3]) for traj in all_traj_x_lqr])
     final_dist_xtfc = np.array([np.linalg.norm(traj[-1, 0:3]) for traj in all_traj_x_xtfc])
     success_mask_lqr = final_dist_lqr <= 0.1

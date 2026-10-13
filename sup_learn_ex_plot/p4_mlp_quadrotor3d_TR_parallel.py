@@ -15,7 +15,7 @@ import gymnasium as gym
 from scipy.linalg import solve_continuous_are
 from supervised_training_common import train_from_saved_trajectories
 
-# ================== 图像设置 =======================
+# Plot settings
 mpl.rcParams['font.family'] = 'Times New Roman'
 mpl.rcParams['text.usetex'] = False
 mpl.rcParams['axes.unicode_minus'] = False

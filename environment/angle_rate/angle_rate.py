@@ -19,28 +19,28 @@ class AngleRate(gym.Env):
     def __init__(self, options={}, theoretic_mode=False):
         super().__init__()
         
-        # 模型设置
+        # Model setup
         self.system_torch_dynamics = SystemTorchDynamics(self.metadata)
 
-        # 状态范围：角度[-pi, pi]，角速度[-5, 5]
+
         state_low = np.array([-1.5, -1.5, -1.5, -10, -10, -10])
         state_high = np.array([1.5, 1.5, 1.5, 10, 10, 10])
         self.observation_space = spaces.Box(
             low=state_low, high=state_high, shape=(self.metadata['nx'],), dtype=np.float64
         )
 
-        # 控制输入范围：力矩[-2, 2]
+
         self.action_space = spaces.Box(
             low=-10, high=10, shape=(self.metadata['nu'],), dtype=np.float64
         )
 
-        # 初始化状态
+
         self.state = 1.0 * self.np_random.uniform(
             self.observation_space.low, self.observation_space.high
         )
-        self.state[3:] = 0.0  # 初始角速度设为 0
+        self.state[3:] = 0.0
 
-        # 模型参数
+        # Model parameters
         self.A = np.array([
         [0, 0, 0, 1, 0, 0],
         [0, 0, 0, 0, 1, 0],
@@ -59,7 +59,7 @@ class AngleRate(gym.Env):
         [0, 0, 1 / self.metadata['Izz']]
         ])
 
-        # 控制参数
+        # Control parameters
         control_param = options.get('control_param')
         if control_param is None:
             self.Q = self.metadata['Q']
@@ -68,14 +68,14 @@ class AngleRate(gym.Env):
             self.Q = control_param['Q']
             self.R = control_param['R']
 
-        # 仿真参数
+        # Simulation parameters
         self.dt = 0.01
         self.t = 0.0
         self.data = {}
-        self.T = 10  # 最大运行时间
+        self.T = 10  # Maximum episode duration
         self.theoretic_mode = theoretic_mode
 
-        # 扰动设置
+        # Disturbance settings
         self.has_disturbed = False
         disturb_param = options.get('disturb_param')
         if disturb_param is not None:
@@ -100,7 +100,7 @@ class AngleRate(gym.Env):
         self.state[3:] = 0.0
         self.t = 0.0
         self.data = {}
-        # 控制参数
+        # Control parameters
         if options is not None:
             control_param = options.get('control_param')
         else:
@@ -109,7 +109,7 @@ class AngleRate(gym.Env):
             self.Q = control_param['Q']
             self.R = control_param['R']
 
-        # 扰动设置
+        # Disturbance settings
         if options is not None:
             self.disturb_param = options.get('disturb_param')
         else:
@@ -123,14 +123,14 @@ class AngleRate(gym.Env):
         return self._get_obs(), self._get_info()
     
     def step(self, action):
-        # 将 action 限制在 action_space 的范围内
+        # Clip the action to the action-space bounds
         action = np.clip(action, self.action_space.low, self.action_space.high)
-        # 状态更新（使用非线性系统）
+        # Update the state
         old_state = deepcopy(self.state)
         dxdt = self._nonlinear_dynamics_np(self.state, action) + self.disturbance()
         self.state = self.state + dxdt * self.dt
         self.t = self.t + self.dt
-        # 奖励函数
+        # Reward function
         reward = -(self.state.T @ self.Q @ self.state + action.T @ self.R @ action) * self.dt + 10 * self.dt * (1 - self.theoretic_mode)
         if np.all(np.abs(self.state) < np.array([0.01, 0.01, 0.01, 0.01, 0.01, 0.01])):
             terminated = True
@@ -146,7 +146,7 @@ class AngleRate(gym.Env):
             truncated = True
         else:
             truncated = False
-        # 信息
+        # Diagnostic information
         if 'state' not in self.data:
             self.data['state'] = [deepcopy(old_state)]
         else:
@@ -172,7 +172,7 @@ class AngleRate(gym.Env):
         phi, theta, psi, p, q, r = state
         tau_x, tau_y, tau_z = action
 
-        # 角速度到角速度的映射矩阵
+
         W = np.array([
             [1, np.tan(theta) * np.sin(phi), np.tan(theta) * np.cos(phi)],
             [0, np.cos(phi), -np.sin(phi)],
@@ -182,7 +182,7 @@ class AngleRate(gym.Env):
         ang_vel = np.array([p, q, r])
         d_angles = W @ ang_vel
 
-        # 欧拉角速度方程 (I=1)
+
         dp = tau_x
         dq = tau_y
         dr = tau_z

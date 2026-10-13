@@ -21,15 +21,15 @@ class DoubleMass(gym.Env):
     def __init__(self, options={}):
         super().__init__()
         
-        # 模型设置
+        # Model setup
         self.system_torch_dynamics = SystemTorchDynamics(self.metadata)
         self.observation_space = spaces.Box(low=-5.0, high=5.0, shape=(self.metadata['nx'],), dtype=np.float64)
         self.action_space = spaces.Box(low=-5.0, high=5.0, shape=(self.metadata['nu'],), dtype=np.float64)
 
-        # 在observation_space范围内随机生成一个状态
+
         self.state = self.np_random.uniform(self.observation_space.low, self.observation_space.high) * 0.5
 
-        # 模型参数
+        # Model parameters
         model_param = options.get('model_param')
         if model_param is None:
             a1 = self.metadata['a1']
@@ -63,7 +63,7 @@ class DoubleMass(gym.Env):
             
         ])
 
-        # 控制参数
+        # Control parameters
         control_param = options.get('control_param')
         if control_param is None:
             self.Q = self.metadata['Q']
@@ -72,11 +72,11 @@ class DoubleMass(gym.Env):
             self.Q = control_param['Q']
             self.R = control_param['R']
 
-        # 仿真参数
+        # Simulation parameters
         self.dt = 0.05
         self.t = 0.0
         self.data = {}
-        self.T = 5.0  # 最大运行时间
+        self.T = 5.0  # Maximum episode duration
 
 
     def _get_obs(self):
@@ -92,7 +92,7 @@ class DoubleMass(gym.Env):
         self.state = self.np_random.uniform(self.observation_space.low, self.observation_space.high) * 0.5
         self.t = 0.0
         self.data = {}
-        # 模型参数
+        # Model parameters
         if options is not None:
             model_param = options.get('model_param')
         else:
@@ -117,7 +117,7 @@ class DoubleMass(gym.Env):
                 [0, 0],
                 [0, b2]
             ])
-        # 控制参数
+        # Control parameters
         if options is not None:
             control_param = options.get('control_param')
         else:
@@ -129,14 +129,14 @@ class DoubleMass(gym.Env):
         return self._get_obs(), self._get_info()
 
     def step(self, action):
-        # 将 action 限制在 action_space 的范围内
+        # Clip the action to the action-space bounds
         action = np.clip(action, self.action_space.low, self.action_space.high)
-        # 状态更新
+        # Update the state
         old_state = deepcopy(self.state)
         dxdt = self.A @ self.state + self.B @ action
         self.state = self.state + dxdt * self.dt
         self.t = self.t + self.dt
-        # 奖励函数
+        # Reward function
         reward = -(self.state.T @ self.Q @ self.state + action.T @ self.R @ action) * self.dt + 10 * self.dt
         if np.all(np.abs(self.state) < np.array([0.2, 0.2, 0.2, 0.2])):
             terminated = True
@@ -154,7 +154,7 @@ class DoubleMass(gym.Env):
             truncated = True
         else:
             truncated = False
-        # 信息
+        # Diagnostic information
         if 'state' not in self.data:
             self.data['state'] = [deepcopy(old_state)]
         else:
@@ -210,7 +210,7 @@ class SystemTorchDynamics(torch.nn.Module):
         ])
 
     def forward(self, x, u):
-        # 将A, B转为torch tensor（如果还没转的话），并确保和x, u的dtype/device一致
+
         A = torch.from_numpy(self.A).to(x.device).type(x.dtype)
         B = torch.from_numpy(self.B).to(x.device).type(x.dtype)
         # x: (N, nx), u: (N, nu)

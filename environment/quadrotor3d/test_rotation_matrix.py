@@ -1,5 +1,5 @@
 '''
-测试四元数和欧拉角之间的旋转关系是否正确
+Test the consistency of quaternion and Euler-angle rotations.
 '''
 
 
@@ -7,10 +7,10 @@ import numpy as np
 
 def euler_kinematics(euler_angles, body_rates):
     """
-    由欧拉角和机体系角速度(p, q, r)计算欧拉角变化率(dot_phi, dot_theta, dot_psi)
+    Compute Euler-angle rates from Euler angles and body-frame angular rates (p, q, r).
     euler_angles: [phi, theta, psi]
     body_rates: [p, q, r]
-    返回: [dot_phi, dot_theta, dot_psi]
+    Returns: [dot_phi, dot_theta, dot_psi]
     """
     phi, theta, psi = euler_angles
     R = np.array([
@@ -69,44 +69,44 @@ if __name__ == '__main__':
     import numpy as np
     import matplotlib.pyplot as plt
 
-    # 仿真参数
+
     T = 5.0
     dt = 0.01
     N = int(T / dt)
     time = np.arange(N) * dt
 
-    # 初始欧拉角和四元数
+
     euler = np.zeros(3)
     quat = euler_to_quaternion(euler)
-    # 恒定角速度
+
     body_rates = np.array([0.3, 0.1, 0.1])
 
-    # 记录
+
     euler_traj = np.zeros((N, 3))
     quat_traj = np.zeros((N, 4))
     euler_from_quat_traj = np.zeros((N, 3))
     quat_from_euler_traj = np.zeros((N, 4))
 
     for i in range(N):
-        # 记录当前
+
         euler_traj[i] = euler
         quat_traj[i] = quat
-        # 互相转化
+
         quat_from_euler = euler_to_quaternion(euler)
         euler_from_quat = quaternion_to_euler(quat)
         quat_from_euler_traj[i] = quat_from_euler
         euler_from_quat_traj[i] = euler_from_quat
 
-        # 步进欧拉角动力学
+
         euler_dot = euler_kinematics(euler, body_rates)
         euler = euler + euler_dot * dt
 
-        # 步进四元数动力学
+
         quat_dot = quaternion_kinematics(quat, body_rates)
         quat = quat + quat_dot * dt
-        quat = quat / np.linalg.norm(quat)  # 保持单位四元数
+        quat = quat / np.linalg.norm(quat)
 
-    # 画图1：欧拉角动力学 vs 四元数动力学转欧拉角
+
     plt.figure(figsize=(10, 6))
     plt.subplot(3, 1, 1)
     plt.plot(time, euler_traj[:, 0], label="Euler kinematics")
@@ -125,7 +125,7 @@ if __name__ == '__main__':
     plt.suptitle("Euler kinematics vs Quaternion kinematics (converted to Euler angles)")
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
-    # 画图2：四元数动力学 vs 欧拉角动力学转四元数
+
     plt.figure(figsize=(10, 6))
     plt.subplot(4, 1, 1)
     plt.plot(time, quat_traj[:, 0], label="Quaternion kinematics")

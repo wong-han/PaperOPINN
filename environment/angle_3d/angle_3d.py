@@ -15,15 +15,15 @@ class Angle3D(gym.Env):
     def __init__(self, options={}, theoretic_mode=False):
         super().__init__()
         
-        # 模型设置
+        # Model setup
         self.system_torch_dynamics = SystemTorchDynamics(self.metadata)
         self.observation_space = spaces.Box(low=-1.5, high=1.5, shape=(self.metadata['nx'],), dtype=np.float64)
         self.action_space = spaces.Box(low=-5.0, high=5.0, shape=(self.metadata['nu'],), dtype=np.float64)
 
-        # 在observation_space范围内随机生成一个状态
+
         self.state = 0.666 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
 
-        # 控制参数（仍然使用单位阵，或按外部传入）
+        # Control parameters
         control_param = options.get('control_param')
         if control_param is None:
             self.Q = self.metadata['Q']
@@ -32,14 +32,14 @@ class Angle3D(gym.Env):
             self.Q = control_param['Q']
             self.R = control_param['R']
 
-        # 仿真参数
+        # Simulation parameters
         self.dt = 0.02
         self.t = 0.0
         self.data = {}
-        self.T = 10.0  # 最大运行时间
-        self.theoretic_mode = theoretic_mode  # 理论模式：仅计算∫(x^TQx+u^TRu)dt性能指标
+        self.T = 10.0  # Maximum episode duration
+        self.theoretic_mode = theoretic_mode
 
-        # 扰动设置
+        # Disturbance settings
         self.has_disturbed = False
         disturb_param = options.get('disturb_param')
         if disturb_param is not None:
@@ -61,7 +61,7 @@ class Angle3D(gym.Env):
         self.state = 0.9 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
         self.t = 0.0
         self.data = {}
-        # 控制参数
+        # Control parameters
         if options is not None:
             control_param = options.get('control_param')
         else:
@@ -70,7 +70,7 @@ class Angle3D(gym.Env):
             self.Q = control_param['Q']
             self.R = control_param['R']
 
-        # 扰动设置
+        # Disturbance settings
         if options is not None:
             self.disturb_param = options.get('disturb_param')
         else:
@@ -81,19 +81,19 @@ class Angle3D(gym.Env):
         else:
             self.disturb_mode = None
         
-        # 仿真设置
+
         self.theoretic_mode = theoretic_mode
         return self._get_obs(), self._get_info()
     
     def step(self, action):
-        # 将 action 限制在 action_space 的范围内
+        # Clip the action to the action-space bounds
         action = np.clip(action, self.action_space.low, self.action_space.high)
-        # 状态更新（使用三维角度非线性系统）
+        # Update the state
         old_state = deepcopy(self.state)
         dxdt = self._angle3d_dynamics_np(self.state, action) + self.disturbance()
         self.state = self.state + dxdt * self.dt
         self.t = self.t + self.dt
-        # 奖励函数（Q, R为单位阵）
+        # Reward function
         reward = -(self.state.T @ self.Q @ self.state + action.T @ self.R @ action) * self.dt + 10 * self.dt * (1 - self.theoretic_mode)
         if np.all(np.abs(self.state) < np.array([0.1, 0.1, 0.1])):
             state_norm = np.linalg.norm(self.state)
@@ -115,7 +115,7 @@ class Angle3D(gym.Env):
             truncated = True
         else:
             truncated = False
-        # 信息
+        # Diagnostic information
         if 'state' not in self.data:
             self.data['state'] = [deepcopy(old_state)]
         else:
@@ -140,11 +140,11 @@ class Angle3D(gym.Env):
         # state: (3,) -> [phi, theta, psi]; action: (3,) -> [p, q, r]
         phi = state[0]
         theta = state[1]
-        # psi = state[2]  # 未直接出现在右端
+
         p = action[0]
         q = action[1]
         r = action[2]
-        # 避免cos(theta)=0导致除零
+
         cos_theta = np.cos(theta)
         cos_theta = np.clip(cos_theta, 1e-6, None)
         tan_theta = np.tan(theta)
@@ -165,12 +165,12 @@ class Angle3D(gym.Env):
         return disturbance
         
     def disturb_once(self):
-        # 非线性系统不再支持对A, B参数的扰动；此处保留接口但不修改系统参数
+        # Parameter perturbations are not applied to this nonlinear system
         if self.has_disturbed == True:
             return
         self.has_disturbed = True
         if self.disturb_mode in ['ParamBias', 'OppositeB']:
-            # 对于这些模式，在非线性系统中无操作
+            # No parameter change is required for these modes
             pass
 
     def render(self):

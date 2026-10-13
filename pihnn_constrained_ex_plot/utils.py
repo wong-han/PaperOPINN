@@ -4,28 +4,28 @@ from mpl_toolkits.mplot3d import proj3d
 from matplotlib.patches import FancyArrowPatch
 import matplotlib as mpl
 
-# ================== 图像设置 =======================
-mpl.rcParams['font.family'] = 'Times New Roman'  # 默认字体
-# mpl.rcParams['font.weight'] = 'bold'  # 加粗
-mpl.rcParams['text.usetex'] = True  # 使用TEX
-mpl.rcParams['axes.unicode_minus'] = False  # 解决无法显示负号
-mpl.rcParams['xtick.direction'] = 'in'  # x轴刻度线朝内
-mpl.rcParams['ytick.direction'] = 'in'  # y轴刻度线朝内
-mpl.rcParams['xtick.top'] = True  # 显示上方的坐标轴
-mpl.rcParams['ytick.right'] = True  # 显示右侧的坐标轴
+# Plot settings
+mpl.rcParams['font.family'] = 'Times New Roman'  # Default font
+# Bold font
+mpl.rcParams['text.usetex'] = True  # Use TeX rendering
+mpl.rcParams['axes.unicode_minus'] = False  # Render minus signs correctly
+mpl.rcParams['xtick.direction'] = 'in'  # Draw ticks inward
+mpl.rcParams['ytick.direction'] = 'in'  # Draw ticks inward
+mpl.rcParams['xtick.top'] = True  # Show top ticks
+mpl.rcParams['ytick.right'] = True  # Show right ticks
 
-mpl.rcParams['legend.frameon'] = False  # legend不显示边框
-mpl.rcParams['legend.fontsize'] = 24  # legend默认size
+mpl.rcParams['legend.frameon'] = False  # Hide the legend frame
+mpl.rcParams['legend.fontsize'] = 24  # Default legend font size
 
-mpl.rcParams['axes.titlesize'] = 24   # 设置title默认size
-mpl.rcParams['xtick.labelsize'] = 24  # x坐标默认size
-mpl.rcParams['ytick.labelsize'] = 24  # y坐标默认size
-mpl.rcParams['axes.labelsize'] = 24  # 轴标题默认size
-mpl.rcParams['lines.linewidth'] = 2  # 线条宽度
+mpl.rcParams['axes.titlesize'] = 24   # Default title size
+mpl.rcParams['xtick.labelsize'] = 24  # Default tick-label size
+mpl.rcParams['ytick.labelsize'] = 24  # Default tick-label size
+mpl.rcParams['axes.labelsize'] = 24  # Default axis-label size
+mpl.rcParams['lines.linewidth'] = 2  # Line width
 mpl.rcParams['axes.grid'] = True
-mpl.rcParams['grid.linestyle'] = '--'  # 虚线
-mpl.rcParams['grid.alpha'] = 0.5       # 透明度
-mpl.rcParams['grid.color'] = 'gray'    # 网格颜色
+mpl.rcParams['grid.linestyle'] = '--'  # Dashed grid lines
+mpl.rcParams['grid.alpha'] = 0.5       # Transparency
+mpl.rcParams['grid.color'] = 'gray'    # Grid color
 
 class Arrow3D(FancyArrowPatch):
     def __init__(self, xs, ys, zs, *args, **kwargs):
@@ -63,14 +63,14 @@ class DroneVisualizer:
         self.fig.set_facecolor('white')
         self.ax.view_init(elev=25, azim=-53, roll=0)
 
-        # 轴范围视为-5~5, 0~10
+        # Axis limits
         # self.ax.set_xlim([-1.5, 1.5])
         # self.ax.set_ylim([-1.5, 1.5])
         # self.ax.set_zlim([-1.5, 1.5])
         self.ax.set_xlabel('$x$(m)',labelpad=10)
         self.ax.set_ylabel('$y$(m)',labelpad=10)
         self.ax.set_zlabel('$z$(m)')
-        # 坐标轴外观
+        # Axis appearance
         self.ax.xaxis.pane.fill = True
         self.ax.yaxis.pane.fill = True
         self.ax.zaxis.pane.fill = True
@@ -110,7 +110,7 @@ class DroneVisualizer:
         return Rz @ Ry @ Rx
 
     def _create_cube(self, size):
-        """创建立方体顶点"""
+        """Create the cuboid vertices."""
         v = np.array([[-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
                      [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]]) * size/2
         f = [[0,1,2,3], [4,5,6,7], [0,1,5,4], 
@@ -126,7 +126,7 @@ class DroneVisualizer:
         return x, y, z
 
     def _create_arm(self, length, thickness, angle):
-        """创建旋翼臂"""
+        """Create a rotor arm."""
         v = np.array([
             [-thickness/2, -thickness/2, -thickness/2],
             [length/2, -thickness/2, -thickness/2],
@@ -137,7 +137,7 @@ class DroneVisualizer:
             [length/2, thickness/2, thickness/2],
             [-thickness/2, thickness/2, thickness/2]
         ])
-        # 旋转臂到正确方向
+
         rot = np.array([
             [np.cos(angle), -np.sin(angle), 0],
             [np.sin(angle), np.cos(angle), 0],
@@ -157,8 +157,8 @@ class DroneVisualizer:
         return x, y, z
 
     def _create_rotor(self, radius, height):
-        """创建旋翼（圆柱体）"""
-        # 修正z和theta meshgrid顺序，确保网格shape为(theta, z)
+        """Create a rotor represented by a cylinder."""
+
         theta = np.linspace(0, 2 * np.pi, 30)
         z = np.linspace(-height / 2, height / 2, 2)
         theta_grid, z_grid = np.meshgrid(theta, z, indexing='ij')  # shape (30,2)
@@ -169,13 +169,13 @@ class DroneVisualizer:
         return x, y, z
 
     def _draw_drone(self, position, att, alpha):
-        """在指定位置和姿态绘制无人机，透明度为alpha"""
+        """Draw the quadrotor at the specified position and attitude with opacity alpha."""
         # att: (roll, pitch, yaw) in degree
         roll, pitch, yaw = att
         R = self._rotation_matrix(roll, pitch, yaw)
         x0, y0, z0 = position
 
-        # 机身
+        # Fuselage
         cube_size = 0.5 * self.size_factor
         cube = self._create_cube(cube_size)
         cube_flat = np.array([cube[0].flatten(), cube[1].flatten(), cube[2].flatten()])
@@ -188,7 +188,7 @@ class DroneVisualizer:
             color='#4c72b0', alpha=alpha, edgecolor='black', linewidth=0.5
         )
 
-        # 旋翼臂
+        # Rotor arms
         arm_length = 1.5 * self.size_factor
         arm_thickness = 0.1 * self.size_factor
         arms = []
@@ -206,7 +206,7 @@ class DroneVisualizer:
             )
             arms.append(a)
 
-        # 旋翼
+        # Rotors
         rotor_radius = 0.4 * self.size_factor
         rotor_height = 0.05 * self.size_factor
         for angle in [45, 135, 225, 315]:
@@ -226,7 +226,7 @@ class DroneVisualizer:
                 color='#c44e52', alpha=alpha, edgecolor='black', linewidth=0.3
             )
 
-        # 方向箭头
+        # Direction arrow
         arrow_end = R @ np.array([1,0,0]) * self.size_factor
         arrow_props = dict(mutation_scale=15, arrowstyle='-|>', color='red', linewidth=2, alpha=alpha)
         arrow = Arrow3D(
@@ -238,7 +238,7 @@ class DroneVisualizer:
         self.ax.add_artist(arrow)
 
     def show(self):
-        # 绘制轨迹曲线
+        # Plot the trajectory
         self.ax.plot(self.traj[:,0], self.traj[:,1], self.traj[:,2], 'b', alpha=0.4, linewidth=1.5)
         # draw drone along trajectory, with alpha gradient
         indices = list(range(0, self.N, self.stride))
@@ -254,16 +254,16 @@ class DroneVisualizer:
     
     def add_one_traj(self, traj, attitudes, stride):
         N = traj.shape[0]
-        # 根据轨迹距离原点的距离画上由红到蓝的渐变
+
         from matplotlib import cm
         from matplotlib.colors import Normalize
 
-        # 计算每个点距离原点的距离
+
         dists = np.linalg.norm(traj, axis=1)
         norm = Normalize(vmin=np.min(dists), vmax=np.max(dists))
         cmap = cm.get_cmap('bwr')
 
-        # 绘制带有渐变色的轨迹曲线（3D线段）
+        # Plot the trajectory with a color gradient
         for i in range(N-1):
             seg_traj = traj[i:i+2]
             color = cmap(norm(dists[i]))
@@ -277,13 +277,13 @@ class DroneVisualizer:
             color = cmap(norm(dists[idx]))
             if np.linalg.norm(traj[idx]) > 0.5:
                 self._draw_drone(traj[idx], attitudes[idx], alpha=1.0)
-                # 在 drone 外部画透明的球体用以区分颜色（可选）
+
                 # self.ax.scatter(traj[idx,0], traj[idx,1], traj[idx,2], color=color, s=30, alpha=0.7)
             else:
                 self._draw_drone(traj[-1], attitudes[-1], alpha=1.0)
     
     def add_only_traj(self, traj):
-        # 绘制带有渐变色的轨迹曲线（3D线段）
+        # Plot the trajectory with a color gradient
         from matplotlib import cm
         from matplotlib.colors import Normalize
         N = traj.shape[0]
@@ -296,11 +296,11 @@ class DroneVisualizer:
             self.ax.plot(seg_traj[:,0], seg_traj[:,1], seg_traj[:,2], color=color, linewidth=1.5, alpha=0.2)
 
 # ==============
-# 示例用法/调用
+# Example usage
 # ==============
 
 if __name__ == "__main__":
-    # 轨迹示例(N x 3), 姿态示例(N x 3)
+    # Example trajectory and attitude arrays
     t = np.linspace(0, 10, 101)
     traj_demo = np.stack([
         3*np.cos(0.6*t),

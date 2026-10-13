@@ -1,5 +1,5 @@
 '''
-简化所有loss计算为一体; 使用正定值函数网络设计；
+Combine all loss terms and use a positive-definite value-network design.
 '''
 import sys, os
 import time
@@ -17,45 +17,45 @@ import gymnasium as gym
 from sup_angle3d import PINNNetwork
 
 
-# ================== 图像设置 =======================
-mpl.rcParams['font.family'] = 'Times New Roman'  # 默认字体
-# mpl.rcParams['font.weight'] = 'bold'  # 加粗
-mpl.rcParams['text.usetex'] = False  # 使用TEX
-mpl.rcParams['axes.unicode_minus'] = False  # 解决无法显示负号
-mpl.rcParams['xtick.direction'] = 'in'  # x轴刻度线朝内
-mpl.rcParams['ytick.direction'] = 'in'  # y轴刻度线朝内
-mpl.rcParams['xtick.top'] = True  # 显示上方的坐标轴
-mpl.rcParams['ytick.right'] = True  # 显示右侧的坐标轴
+# Plot settings
+mpl.rcParams['font.family'] = 'Times New Roman'  # Default font
+# Bold font
+mpl.rcParams['text.usetex'] = False  # Use TeX rendering
+mpl.rcParams['axes.unicode_minus'] = False  # Render minus signs correctly
+mpl.rcParams['xtick.direction'] = 'in'  # Draw ticks inward
+mpl.rcParams['ytick.direction'] = 'in'  # Draw ticks inward
+mpl.rcParams['xtick.top'] = True  # Show top ticks
+mpl.rcParams['ytick.right'] = True  # Show right ticks
 
-mpl.rcParams['legend.frameon'] = False  # legend不显示边框
-mpl.rcParams['legend.fontsize'] = 24  # legend默认size
+mpl.rcParams['legend.frameon'] = False  # Hide the legend frame
+mpl.rcParams['legend.fontsize'] = 24  # Default legend font size
 
-mpl.rcParams['axes.titlesize'] = 24   # 设置title默认size
-mpl.rcParams['xtick.labelsize'] = 24  # x坐标默认size
-mpl.rcParams['ytick.labelsize'] = 24  # y坐标默认size
-mpl.rcParams['axes.labelsize'] = 24  # 轴标题默认size
-mpl.rcParams['lines.linewidth'] = 2  # 线条宽度
+mpl.rcParams['axes.titlesize'] = 24   # Default title size
+mpl.rcParams['xtick.labelsize'] = 24  # Default tick-label size
+mpl.rcParams['ytick.labelsize'] = 24  # Default tick-label size
+mpl.rcParams['axes.labelsize'] = 24  # Default axis-label size
+mpl.rcParams['lines.linewidth'] = 2  # Line width
 mpl.rcParams['axes.grid'] = True
-mpl.rcParams['grid.linestyle'] = '--'  # 虚线
-mpl.rcParams['grid.alpha'] = 0.5       # 透明度
-mpl.rcParams['grid.color'] = 'gray'    # 网格颜色
+mpl.rcParams['grid.linestyle'] = '--'  # Dashed grid lines
+mpl.rcParams['grid.alpha'] = 0.5       # Transparency
+mpl.rcParams['grid.color'] = 'gray'    # Grid color
 
 
-# =================== 参数设置 ======================
+# Parameters
 class Args:
-    # 随机种子
+    # Random seed
     seed = 42
-    # 环境名称
+    # Environment identifier
     env_id = "environment:angle3d-v0"
-    # 学习率
+    # Learning rate
     learning_rate = 1e-3
-    # 总训练次数
+    # Total training iterations
     time_steps = 10000
-    # 训练批次
+    # Training batch size
     batch_size = 512
-    # 是否使用GPU
+    # Select the compute device
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    # 文件名前缀
+    # Output filename prefix
     filename_prefix = "hnn_angle3d_"
 
 args = Args()
@@ -95,12 +95,12 @@ def dynamics(X, U):
     return fxu
 
 
-# 计算控制矩阵pfpu
+# Compute the control Jacobian
 def get_pfpu(X):
     """
-    计算动力学对u的雅可比矩阵（每个样本一个3x3矩阵）
+    Compute the control Jacobian of the dynamics for each sample.
     X: (N, 3) -> [phi, theta, psi]
-    返回: (N, 3, 3)
+    Returns: (N, 3, 3)
     """
     phi = X[:, 0]
     theta = X[:, 1]
@@ -126,13 +126,13 @@ def get_pfpu(X):
 
     return pfpu
 
-# 计算pfpx
+# Compute the state Jacobian
 def get_pfpx(X, U):
     """
-    计算动力学对X的雅可比矩阵（每个样本一个3x3x3矩阵）
+    Compute the state Jacobian of the dynamics for each sample.
     X: (N, 3) -> [phi, theta, psi]
     U: (N, 3) -> [p, q, r]
-    返回: (N, 3, 3)
+    Returns: (N, 3, 3)
     """
     phi = X[:, 0]
     theta = X[:, 1]
@@ -173,7 +173,7 @@ class HNN(nn.Module):
         self.env = env.unwrapped if hasattr(env, 'unwrapped') else env
         super().__init__()
 
-        # 共享层
+        # Shared layers
         self.shared_net = nn.Sequential(
             layer_init(nn.Linear(env.observation_space.shape[0], 64)),
             nn.Tanh(),
@@ -233,7 +233,7 @@ class HNN(nn.Module):
     
     def get_pHpX(self, x):
         x = x.requires_grad_(True)
-        Lambda = self.get_lambda(x).detach()  # 切断Lambda对x的梯度连接
+        Lambda = self.get_lambda(x).detach()  # Detach the costate output from the state graph
         hamilton_input = torch.cat([x, Lambda], dim=-1)
         H = self.hamilton_part(hamilton_input).squeeze(-1)  # (batch,)
         grads = []
@@ -252,7 +252,7 @@ class HNN(nn.Module):
         
         pfpu = get_pfpu(X)  # (batch_size, 2, 1)
         
-        # 计算 u_star = -0.5 * inv(R) * pfpu.T * grad_V
+
         # R: numpy 1x1, pfpu: (batch_size, 2, 1), grad_V: (batch_size, 2)
         R_inv = torch.tensor(np.linalg.inv(R), dtype=X.dtype, device=X.device)  # (1, 1)
         pfpu_T = pfpu.transpose(1, 2)      # (batch_size, 1, 2)
@@ -270,7 +270,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 def get_all_loss(model, X):
-    # 先把需要的量都算出来
+    # Compute the quantities required by the loss
     V = model.get_value(X)
     Lambda = model.get_lambda(X)
     Lambda_unsq = Lambda.unsqueeze(2)
@@ -313,19 +313,19 @@ def get_all_loss(model, X):
     u_star = -0.5 * torch.matmul(pfpu_T, Lambda_unsq)  # (batch_size, 1, 1)
     u_star = torch.matmul(R_inv, u_star.squeeze(-1).T).T  # (batch_size, 1)
 
-    # 再计算损失
-    # 1 pVpx = lambda损失
+    # Assemble the loss terms
+
     loss1 = torch.nn.functional.mse_loss(Lambda, pVpX)
     
-    # 2 V > 0损失
+
     loss2 = torch.relu(-V).mean()
 
-    # 3 x_dot = pHpLambda损失
+
     fxu = dynamics(X, u_star)
     fxu_detach = fxu.detach().clone()
     loss3 = torch.nn.functional.mse_loss(fxu_detach, pHpLambda)
 
-    # 4 lambda_dot = -pHpX损失
+
     Q = model.env.Q
     Q_torch = torch.tensor(Q, dtype=X.dtype, device=X.device)
     pfpx = get_pfpx(X, u_star)  # (batch_size, 2, 2)
@@ -336,13 +336,13 @@ def get_all_loss(model, X):
     Lambda_dot = -(term1 + term2)  # (batch_size, 2)
     loss4 = torch.nn.functional.mse_loss(-pHpX, Lambda_dot)
 
-    # 5 H = 0损失
+
     xQx = torch.einsum('bi,ij,bj->b', X, Q_torch, X)  # (batch_size,)
     # u_star_connect = u_star = -0.5 * torch.matmul(pfpu_T, Lambda_unsq)  # (batch_size, 1, 1)
     # u_star_connect = torch.matmul(R_inv, u_star_connect.squeeze(-1).T).T  # (batch_size, 1)
     uRu = torch.einsum('bi,ij,bj->b', u_star, R_torch, u_star)  # (batch_size,)
     gradV_fxu = (Lambda * fxu).sum(dim=1)
-    H = xQx + uRu + gradV_fxu  # 希望H=0
+    H = xQx + uRu + gradV_fxu  # The Hamiltonian residual should vanish
     loss5 = (H ** 2).mean()
 
     return loss1 + loss2 + loss3 + loss4 + loss5
@@ -351,7 +351,7 @@ def get_all_loss(model, X):
 def lambda_zero_loss(model):
     zero_point = torch.zeros(1, model.env.observation_space.shape[0], device=next(model.parameters()).device)
     zero_point_Lambda = model.get_lambda(zero_point)
-    # 计算零点处Lambda对输入的导数
+    # Differentiate the costate output at the origin
     zero_point = zero_point.clone().detach().requires_grad_(True)
     Lambda = model.get_lambda(zero_point)  # (1, state_dim)
     grad_Lambda = []
@@ -386,28 +386,28 @@ def train_hnn(seed=None):
     start_time = time.time()
 
     for step in range(args.time_steps):
-        # 采样数据
+        # Sample training data
         low = -1.1
         high = 1.1
         x_batch = np.random.uniform(low, high, (args.batch_size, env.observation_space.shape[0]))
         X = torch.from_numpy(x_batch).float().to(args.device)
         X.requires_grad_(True)
-        # 计算损失函数
+        # Compute the loss
         loss = get_all_loss(hnn, X) + lambda_zero_loss(hnn)
 
-        # 更新参数
+        # Update model parameters
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
 
-        # 打印损失
+        # Report the loss
         if (step + 1) % 100 == 0 or step == 0:
             print(f"Step {step+1}/{args.time_steps}, Loss: {loss.item():.6f}")
 
     end_time = time.time()
     print(f"Training completed. Total training time: {end_time - start_time:.2f} seconds.")
 
-    # 保存模型
+    # Save the model
     model_dir = "model"
     os.makedirs(model_dir, exist_ok=True)
     model_path = os.path.join(model_dir, "hnn_angle3d.pth")
@@ -416,7 +416,7 @@ def train_hnn(seed=None):
 
 
 def plot_value():
-    # 加载模型参数
+    # Load model parameters
     model_dir = "model"
     model_path = os.path.join(model_dir, "hnn_angle3d.pth")
     args = Args()
@@ -425,7 +425,7 @@ def plot_value():
     hnn.load_state_dict(torch.load(model_path, map_location="cpu"))
     hnn.eval()
 
-    # 构建三维状态的切片网格，x1,x2在-1到1之间，x3=0
+    # Construct a three-dimensional state slice
     x1 = np.linspace(-1, 1, 50)
     x2 = np.linspace(-1, 1, 50)
     X1, X2 = np.meshgrid(x1, x2)
@@ -434,23 +434,23 @@ def plot_value():
     X3_flat = np.zeros_like(X1_flat)
     X_grid = np.stack([X1_flat, X2_flat, X3_flat], axis=1)  # shape (N, 3)
 
-    # HNN值函数
+
     X_tensor = torch.from_numpy(X_grid).float()
     with torch.no_grad():
         hnn_values = hnn.get_value(X_tensor).cpu().numpy()
     hnn_values = hnn_values.reshape(X1.shape)
 
-    # LQR值函数: V(x) = x^T P x, 其中P为单位阵
+
     P = np.eye(3)
     lqr_values = np.einsum('ij,jk,ik->i', X_grid, P, X_grid).reshape(X1.shape)
 
-    # 绘制对比曲面在同一张图上
+    # Plot the comparison surfaces
     from mpl_toolkits.mplot3d import Axes3D
 
     fig = plt.figure(figsize=(16, 6))
     ax = fig.add_subplot(111, projection='3d')
 
-    # 使用单色渐变: HNN用Blues, LQR用Greens
+
     surf1 = ax.plot_surface(
         X1, X2, hnn_values, cmap='Blues', alpha=0.85, linewidth=0, antialiased=True, rstride=1, cstride=1
     )
@@ -458,7 +458,7 @@ def plot_value():
         X1, X2, lqr_values, cmap='Greens', alpha=0.55, linewidth=0, antialiased=True, rstride=1, cstride=1
     )
 
-    # 手动添加图例，颜色与曲面一致
+    # Legend
     from matplotlib.lines import Line2D
     legend_elements = [
         Line2D([0], [0], color=plt.cm.Blues(0.7), lw=2, label='HNN'),
@@ -466,13 +466,13 @@ def plot_value():
     ]
     ax.legend(handles=legend_elements)
 
-    # 坐标轴和标题
+
     ax.set_xlabel(r'$x_1$', labelpad=10)
     ax.set_ylabel(r'$x_2$', labelpad=10)
     ax.set_zlabel(r'$V(x)$', labelpad=10)
     ax.set_title(r'Value Function Surface ($x_3=0$)')
     ax.view_init(elev=28, azim=-50, roll=0)
-    # 美化
+
     plt.tight_layout()
     filename = "image/" + args.filename_prefix + "value_function.png"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
@@ -480,7 +480,7 @@ def plot_value():
 
 
 def plot_lambda():
-    # 加载hnn模型参数
+    # Model parameters
     model_dir = "model"
     model_path = os.path.join(model_dir, "hnn_angle3d.pth")
     args = Args()
@@ -489,12 +489,12 @@ def plot_lambda():
     hnn.load_state_dict(torch.load(model_path, map_location="cpu"))
     hnn.eval()
 
-    # 加载监督学习模型
+
     supervised_model = PINNNetwork(input_dim=3, output_dim=3, hidden_dim=32, num_layers=3)
     supervised_model.load_state_dict(torch.load("model/supervised_angle3d_model.pth", map_location="cpu"))
     supervised_model.eval()
 
-    # 构建三维状态的切片网格，x1,x2在-1到1之间，x3=0
+    # Construct a three-dimensional state slice
     x1 = np.linspace(-1, 1, 50)
     x2 = np.linspace(-1, 1, 50)
     X1, X2 = np.meshgrid(x1, x2)
@@ -512,21 +512,21 @@ def plot_lambda():
     hnn_lambda2 = hnn_lambda[:, 1].reshape(X1.shape)
     hnn_lambda3 = hnn_lambda[:, 2].reshape(X1.shape)
 
-    # 监督模型 Lambda
+
     with torch.no_grad():
         sup_lambda = supervised_model(X_tensor).cpu().numpy()  # shape (N, 3)
     sup_lambda1 = sup_lambda[:, 0].reshape(X1.shape)
     sup_lambda2 = sup_lambda[:, 1].reshape(X1.shape)
     sup_lambda3 = sup_lambda[:, 2].reshape(X1.shape)
 
-    # LQR Lambda: Lambda = 2 * P_ref * X, P_ref为单位阵
+
     P_ref = np.eye(3)
     lqr_lambda = 2 * (X_grid @ P_ref)  # shape (N, 3)
     lqr_lambda1 = lqr_lambda[:, 0].reshape(X1.shape)
     lqr_lambda2 = lqr_lambda[:, 1].reshape(X1.shape)
     lqr_lambda3 = lqr_lambda[:, 2].reshape(X1.shape)
 
-    # 计算误差
+    # Compute errors
     err_hnn1 = np.abs(hnn_lambda1 - sup_lambda1)
     err_hnn2 = np.abs(hnn_lambda2 - sup_lambda2)
     err_hnn3 = np.abs(hnn_lambda3 - sup_lambda3)
@@ -535,12 +535,12 @@ def plot_lambda():
     err_lqr3 = np.abs(lqr_lambda3 - sup_lambda3)
     err_list = [err_hnn1, err_hnn2, err_hnn3, err_lqr1, err_lqr2, err_lqr3]
 
-    # 统一colorbar范围
+    # Use a shared color bar
     all_errs = np.array([err_hnn1, err_hnn2, err_hnn3, err_lqr1, err_lqr2, err_lqr3])
     vmin = all_errs.min()
     vmax = all_errs.max()
 
-    # ----------- 图一：三个子图，每个子图画三种模型对应维度的lambda曲面 -----------
+
     from mpl_toolkits.mplot3d import Axes3D
     from matplotlib.lines import Line2D
 
@@ -586,7 +586,7 @@ def plot_lambda():
                     )
             if i == 1:
                 ax.view_init(elev=30, azim=120, roll=0)
-        # 找到等高线投影的最低z面
+
         z_min = ax.get_zlim()[0]
         ax.contourf(X1, X2, err_list[i], levels=10, cmap='RdBu_r', vmin=vmin, vmax=vmax, zdir='z', offset=z_min)
         ax.set_xlabel(r'$x_1$')
@@ -625,7 +625,7 @@ def plot_lambda():
                     )
             if i == 1:
                 ax.view_init(elev=30, azim=120, roll=0)
-        # 找到等高线投影的最低z面
+
         z_min = ax.get_zlim()[0]
         error_cf = ax.contourf(X1, X2, err_list[i+3], levels=10, cmap='RdBu_r', vmin=vmin, vmax=vmax, zdir='z', offset=z_min)
         ax.set_xlabel(r'$x_1$')
@@ -635,7 +635,7 @@ def plot_lambda():
         filename = "image/" + args.filename_prefix + "lambda_lqr"+str(i+1)+".svg"
         fig.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # 统一colorbar
+    # Use a shared color bar
     from mpl_toolkits.axes_grid1 import make_axes_locatable
     fig2 = plt.figure(figsize=(6, 10))
     ax = fig2.add_subplot(111)
@@ -807,7 +807,7 @@ def monte_carlo_simulation():
     plt.tight_layout()
     plt.show()
 
-    # --------- 画状态轨迹统计图 ---------
+    # State trajectories
     time_x = np.arange(horizon + 1)
     fig_x, axs_x = plt.subplots(3, 1, figsize=(10, 9), sharex=True)
 

@@ -19,7 +19,7 @@ class Quadrotor3D_TM(gym.Env):
     # metadata['Izz'] = 2.17e-5
     # metadata['kT'] = 3.6e-10
     # metadata['kM'] = 7.94e-12
-    # metadata['omega_max'] = 37267.8 * 0.5  # 削减最大推力为2.0 * (0.5 ** 2) = 0.5
+
 
     # metadata['Q'] = np.diag([10, 10, 10, 1, 1, 1, 1, 1, 1, 1, 1, 1])
     # metadata['R'] = np.diag([10, 1e4, 1e4, 1e4])
@@ -32,20 +32,20 @@ class Quadrotor3D_TM(gym.Env):
     metadata['Izz'] = 0.1
     metadata['kT'] = 3.6e-10
     metadata['kM'] = 7.94e-12
-    metadata['omega_max'] = 37267.8 * 0.5  # 削减最大推力为2.0 * (0.5 ** 2) = 0.5
+    metadata['omega_max'] = 37267.8 * 0.5
     metadata['Q'] = np.diag([50, 50, 50, 1, 1, 1, 10, 10, 10, 10, 10, 10])
     metadata['R'] = np.diag([1, 1, 1, 1])
 
     def __init__(self, options={}, theoretic_mode=False):
         super().__init__()
 
-        # 模型设置
+
         self.system_torch_dynamics = SystemTorchDynamics(self.metadata)
-        # 状态空间: [p_x, p_y, p_z, v_x, v_y, v_z, phi, theta, psi, p, q, r]
+
         self.state_low = np.array([-1.5, -1.5, -1.5, -10, -10, -10, -np.pi, -np.pi/2, -np.pi, -10, -10, -10])
         self.state_high = np.array([1.5, 1.5, 1.5, 10, 10, 10, np.pi, np.pi/2, np.pi, 10, 10, 10])
         self.observation_space = spaces.Box(low=self.state_low, high=self.state_high, shape=(self.metadata['nx'],), dtype=np.float64)
-        # 动作空间: 4个电机推力
+
         # tau_max = 7e-3
         # self.u_min = np.array([0.0, -tau_max, -tau_max, -tau_max])
         # self.u_max = np.array([1.0, tau_max, tau_max, tau_max])
@@ -55,16 +55,16 @@ class Quadrotor3D_TM(gym.Env):
 
         self.action_space = spaces.Box(low=self.u_min, high=self.u_max, shape=(self.metadata['nu'],), dtype=np.float64)
 
-        # 在observation_space范围内随机生成一个状态
-        self.state = 1.0 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
-        self.state[3:6] = 0.0  # 初始速度为0
-        self.state[6:9] = 0.0  # 初始欧拉角为0
-        self.state[9:12] = 0.0 # 初始角速度为0
 
-        # 模型参数
+        self.state = 1.0 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
+        self.state[3:6] = 0.0
+        self.state[6:9] = 0.0
+        self.state[9:12] = 0.0
+
+
         self.A, self.B = linearize_at_origin(self.metadata)
 
-        # 控制参数
+
         self.u0 = np.array([self.metadata['m']*self.metadata['g'], 0.0, 0.0, 0.0])
         control_param = options.get('control_param')
         if control_param is None:
@@ -76,14 +76,14 @@ class Quadrotor3D_TM(gym.Env):
 
         self.P = scipy.linalg.solve_continuous_are(self.A, self.B, self.Q, self.R)
 
-        # 仿真参数
+
         self.dt = 0.001
         self.t = 0.0
         self.data = {}
-        self.T = 5.0  # 最大运行时间
+        self.T = 5.0
         self.theoretic_mode = theoretic_mode
 
-        # 扰动设置
+
         self.has_disturbed = False
         disturb_param = options.get('disturb_param')
         if disturb_param is not None:
@@ -108,7 +108,7 @@ class Quadrotor3D_TM(gym.Env):
         self.state[9:12] = 0.0
         self.t = 0.0
         self.data = {}
-        # 控制参数
+
         if options is not None:
             control_param = options.get('control_param')
         else:
@@ -117,7 +117,7 @@ class Quadrotor3D_TM(gym.Env):
             self.Q = control_param['Q']
             self.R = control_param['R']
 
-        # 扰动设置
+
         if options is not None:
             self.disturb_param = options.get('disturb_param')
         else:
@@ -131,14 +131,14 @@ class Quadrotor3D_TM(gym.Env):
         return self._get_obs(), self._get_info()
 
     def step(self, action):
-        # 将 action 限制在 action_space 的范围内
+
         action = np.clip(action, self.action_space.low, self.action_space.high)
-        # 状态更新（使用无人机3D非线性系统）
+
         old_state = deepcopy(self.state)
         dxdt = self._nonlinear_dynamics_np(self.state, action) + self.disturbance()
         self.state = self.state + dxdt * self.dt
         self.t = self.t + self.dt
-        # 奖励函数
+
         delta_action = action - self.u0
         reward = -(self.state.T @ self.Q @ self.state + delta_action.T @ self.R @ delta_action) * self.dt + 1000 * self.dt * (1 - self.theoretic_mode)
         if np.all(np.abs(self.state) < np.array([0.01]*12)):
@@ -156,7 +156,7 @@ class Quadrotor3D_TM(gym.Env):
             truncated = True
         else:
             truncated = False
-        # 信息
+
         if 'state' not in self.data:
             self.data['state'] = [deepcopy(old_state)]
         else:
@@ -188,16 +188,16 @@ class Quadrotor3D_TM(gym.Env):
         kT = self.metadata['kT']
         kM = self.metadata['kM']
 
-        # 状态变量
+
         px, py, pz = state[0:3]
         vx, vy, vz = state[3:6]
         phi, theta, psi = state[6:9]
         p, q, r = state[9:12]
 
-        # 动作为4个电机推力
+
         T, tau_x, tau_y, tau_z = action
 
-        # 旋转矩阵
+
         cphi = np.cos(phi)
         sphi = np.sin(phi)
         cth = np.cos(theta)
@@ -210,12 +210,12 @@ class Quadrotor3D_TM(gym.Env):
             [-sth,       sphi * cth,                      cphi * cth]
         ])
 
-        # 位置微分
+
         dpos = np.array([vx, vy, vz])
-        # 速度微分
+
         dv = (1.0 / m) * (R @ np.array([0, 0, T])) - np.array([0, 0, g])
 
-        # 欧拉角微分
+
         tan_theta = np.tan(theta) if np.abs(np.cos(theta)) > 1e-6 else 0.0
         sec_theta = 1.0 / np.cos(theta) if np.abs(np.cos(theta)) > 1e-6 else 0.0
         euler_dot = np.array([
@@ -224,7 +224,7 @@ class Quadrotor3D_TM(gym.Env):
             0, sphi * sec_theta, cphi * sec_theta
         ]).reshape(3, 3) @ np.array([p, q, r])
 
-        # 角速度微分
+
         p_dot = (1.0 / Ixx) * (tau_x + q * r * (Iyy - Izz))
         q_dot = (1.0 / Iyy) * (tau_y + p * r * (Izz - Ixx))
         r_dot = (1.0 / Izz) * (tau_z + p * q * (Ixx - Iyy))
@@ -308,7 +308,7 @@ class SystemTorchDynamics(torch.nn.Module):
         cpsi = torch.cos(psi)
         spsi = torch.sin(psi)
 
-        # 旋转矩阵
+
         R11 = cth * cpsi
         R12 = sphi * sth * cpsi - cphi * spsi
         R13 = cphi * sth * cpsi + sphi * spsi
@@ -319,16 +319,16 @@ class SystemTorchDynamics(torch.nn.Module):
         R32 = sphi * cth
         R33 = cphi * cth
 
-        # 位置微分
+
         dpos = torch.stack([vx, vy, vz], dim=1)
-        # 速度微分
+
         dv = torch.stack([
             (R13 * T) / m,
             (R23 * T) / m,
             (R33 * T) / m - g
         ], dim=1)
 
-        # 欧拉角微分
+
         tan_theta = torch.tan(theta)
         sec_theta = 1.0 / torch.cos(theta)
         euler_dot = torch.stack([
@@ -337,7 +337,7 @@ class SystemTorchDynamics(torch.nn.Module):
             sphi * sec_theta * q + cphi * sec_theta * r
         ], dim=1)
 
-        # 角速度微分
+
         p_dot = (tau_x + q * r * (Iyy - Izz)) / Ixx
         q_dot = (tau_y + p * r * (Izz - Ixx)) / Iyy
         r_dot = (tau_z + p * q * (Ixx - Iyy)) / Izz
@@ -350,9 +350,9 @@ class SystemTorchDynamics(torch.nn.Module):
 
 def linearize_at_origin(metadata):
     """
-    计算动力学模型在零点/悬停平衡点（x=0, T=mg, tau=0）的线性化矩阵A和B (使用 SymPy 计算)
-    :param metadata: 环境参数字典
-    :return: 数值矩阵A, B
+    Compute the linearized A and B matrices at the hover equilibrium x=0, T=mg, tau=0 using SymPy.
+    :param metadata: Environment-parameter dictionary.
+    :return: Numerical matrices A and B.
     """
     m = metadata['m']
     g = metadata['g']

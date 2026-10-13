@@ -20,13 +20,13 @@ class Quadrotor3D_TR(gym.Env):
     def __init__(self, options={}, theoretic_mode=False, rl_mode=False):
         super().__init__()
 
-        # 模型设置
+        # Model setup
         self.system_torch_dynamics = SystemTorchDynamics(self.metadata)
-        # 状态空间: [p_x, p_y, p_z, v_x, v_y, v_z, phi, theta, psi]
+        # State space
         self.state_low = np.array([-1.5, -1.5, -1.5, -10, -10, -10, -np.pi/3, -np.pi/3, -np.pi/2])
         self.state_high = np.array([1.5, 1.5, 1.5, 10, 10, 10, np.pi/3, np.pi/3, np.pi/2])
         self.observation_space = spaces.Box(low=self.state_low, high=self.state_high, shape=(self.metadata['nx'],), dtype=np.float64)
-        # 动作空间: [推力, p, q, r] (推力+角速度)
+        # Action space
         omega_max = np.pi
         self.u_min = np.array([0.0, -omega_max, -omega_max, -omega_max])
         self.u_max = np.array([self.metadata['m']*self.metadata['g']*2, omega_max, omega_max, omega_max])
@@ -35,16 +35,16 @@ class Quadrotor3D_TR(gym.Env):
         if rl_mode:
             self.state = np.random.uniform(-1, 1, 9)
         else:
-            # 在observation_space范围内随机生成一个状态
+
             self.state = 1.0 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
-            self.state[3:6] = 0.0  # 初始速度为0
-            self.state[6:9] = 0.0  # 初始欧拉角为0
+            self.state[3:6] = 0.0  # Initialize velocity to zero
+            self.state[6:9] = 0.0  # Initialize Euler angles to zero
         self.rl_mode = rl_mode
 
-        # 模型参数
+        # Model parameters
         self.A, self.B = self._linearize_at_origin()
 
-        # 控制参数
+        # Control parameters
         self.u0 = np.array([self.metadata['m']*self.metadata['g'], 0.0, 0.0, 0.0])
         control_param = options.get('control_param')
         if control_param is None:
@@ -56,14 +56,14 @@ class Quadrotor3D_TR(gym.Env):
 
         self.P = scipy.linalg.solve_continuous_are(self.A, self.B, self.Q, self.R)
 
-        # 仿真参数
+        # Simulation parameters
         self.dt = 0.01
         self.t = 0.0
         self.data = {}
-        self.T = 8.0  # 最大运行时间
+        self.T = 8.0  # Maximum episode duration
         self.theoretic_mode = theoretic_mode
 
-        # 扰动设置
+        # Disturbance settings
         self.has_disturbed = False
         disturb_param = options.get('disturb_param')
         if disturb_param is not None:
@@ -91,7 +91,7 @@ class Quadrotor3D_TR(gym.Env):
         if rl_mode is not None:
             self.rl_mode = rl_mode
 
-        # 初始状态
+        # Initial state
         if options is not None:
             init_state = options.get('init_state')
         else:
@@ -104,7 +104,7 @@ class Quadrotor3D_TR(gym.Env):
                 
         self.t = 0.0
         self.data = {}
-        # 控制参数
+        # Control parameters
         if options is not None:
             control_param = options.get('control_param')
         else:
@@ -113,7 +113,7 @@ class Quadrotor3D_TR(gym.Env):
             self.Q = control_param['Q']
             self.R = control_param['R']
 
-        # 扰动设置
+        # Disturbance settings
         if options is not None:
             self.disturb_param = options.get('disturb_param')
         else:
@@ -127,14 +127,14 @@ class Quadrotor3D_TR(gym.Env):
         return self._get_obs(), self._get_info()
 
     def step(self, action):
-        # 将 action 限制在 action_space 的范围内
+        # Clip the action to the action-space bounds
         action = np.clip(action, self.action_space.low, self.action_space.high)
-        # 状态更新（使用无人机3D非线性系统）
+        # Update the state
         old_state = deepcopy(self.state)
         dxdt = self._nonlinear_dynamics_np(self.state, action) + self.disturbance()
         self.state = self.state + dxdt * self.dt
         self.t = self.t + self.dt
-        # 奖励函数
+        # Reward function
         delta_action = action - self.u0
         y = self.state[1]
         penalty = 30 * (np.exp(np.maximum(0, -y)) - 1)
@@ -162,7 +162,7 @@ class Quadrotor3D_TR(gym.Env):
         else:
             truncated = False
             
-        # 信息
+        # Diagnostic information
         if 'state' not in self.data:
             self.data['state'] = [deepcopy(old_state)]
         else:
@@ -185,7 +185,7 @@ class Quadrotor3D_TR(gym.Env):
 
     def _linearize_at_origin(self):
         """
-        利用SymPy进行符号表达式计算，并在平衡点处求取雅可比矩阵线性化
+        Use SymPy for symbolic evaluation and compute the Jacobian linearization at the equilibrium.
         """
         m = self.metadata['m']
         g = self.metadata['g']
@@ -247,15 +247,15 @@ class Quadrotor3D_TR(gym.Env):
         m = self.metadata['m']
         g = self.metadata['g']
 
-        # 状态变量
+        # State variables
         px, py, pz = state[0:3]
         vx, vy, vz = state[3:6]
         phi, theta, psi = state[6:9]
 
-        # 动作
+
         T, p, q, r = action
 
-        # 旋转矩阵
+        # Rotation matrix
         cphi = np.cos(phi)
         sphi = np.sin(phi)
         cth = np.cos(theta)
@@ -268,12 +268,12 @@ class Quadrotor3D_TR(gym.Env):
             [-sth,       sphi * cth,                      cphi * cth]
         ])
 
-        # 位置微分
+        # Position derivative
         dpos = np.array([vx, vy, vz])
-        # 速度微分
+        # Velocity derivative
         dv = (1.0 / m) * (R @ np.array([0, 0, T])) - np.array([0, 0, g])
 
-        # 欧拉角微分
+        # Euler-angle derivative
         tan_theta = np.tan(theta) if np.abs(np.cos(theta)) > 1e-6 else 0.0
         sec_theta = 1.0 / np.cos(theta) if np.abs(np.cos(theta)) > 1e-6 else 0.0
         euler_dot = np.array([
@@ -348,7 +348,7 @@ class SystemTorchDynamics(torch.nn.Module):
         cpsi = torch.cos(psi)
         spsi = torch.sin(psi)
 
-        # 旋转矩阵
+        # Rotation matrix
         R11 = cth * cpsi
         R12 = sphi * sth * cpsi - cphi * spsi
         R13 = cphi * sth * cpsi + sphi * spsi
@@ -359,16 +359,16 @@ class SystemTorchDynamics(torch.nn.Module):
         R32 = sphi * cth
         R33 = cphi * cth
 
-        # 位置微分
+        # Position derivative
         dpos = torch.stack([vx, vy, vz], dim=1)
-        # 速度微分
+        # Velocity derivative
         dv = torch.stack([
             (R13 * T) / m,
             (R23 * T) / m,
             (R33 * T) / m - g
         ], dim=1)
 
-        # 欧拉角微分
+        # Euler-angle derivative
         tan_theta = torch.tan(theta)
         sec_theta = 1.0 / torch.cos(theta)
         euler_dot = torch.stack([

@@ -1,6 +1,6 @@
 '''
-使用 Furfaro et al. (2022) 论文中的 X-TFC (Extreme Theory of Functional Connections) PINN 方法
-解决 3D Quadrotor 受限非线性最优控制问题的 HJB 方程。
+Implement the X-TFC (Extreme Theory of Functional Connections) PINN method of Furfaro et al. (2022).
+Solve the HJB equation for the constrained nonlinear three-dimensional quadrotor problem.
 '''
 import sys, os
 import time
@@ -18,7 +18,7 @@ from scipy.linalg import solve_continuous_are
 import pandas as pd
 import seaborn as sns
 
-# ================== 图像设置 =======================
+# Plot settings
 mpl.rcParams['font.family'] = 'Times New Roman'
 mpl.rcParams['text.usetex'] = False
 mpl.rcParams['axes.unicode_minus'] = False
@@ -39,7 +39,7 @@ mpl.rcParams['grid.linestyle'] = '--'
 mpl.rcParams['grid.alpha'] = 0.5
 mpl.rcParams['grid.color'] = 'gray'
 
-# =================== 参数设置 ======================
+# Parameters
 class Args:
     env_id = "environment:quadrotor3d_TR_constrained"
     learning_rate = 1e-2  
@@ -53,7 +53,7 @@ _env_tmp = gym.make(Args.env_id)
 m = _env_tmp.metadata['m']
 g = _env_tmp.metadata['g']
 
-# 动力学相关
+# Dynamics
 def dynamics(X, U):
     x = X[:, 0]
     y = X[:, 1]
@@ -123,7 +123,7 @@ def get_penalty(X):
 
 
 # =====================================================================
-# X-TFC (Extreme Theory of Functional Connections) PINN 架构
+
 # =====================================================================
 class XTFC_PINN(nn.Module):
     def __init__(self, env, hidden_dim=400):
@@ -132,24 +132,24 @@ class XTFC_PINN(nn.Module):
         self.state_dim = env.observation_space.shape[0]
         self.hidden_dim = hidden_dim
 
-        # 1. ELM 随机初始化隐藏层权重并冻结 (不参与梯度更新)
-        # 使用 normal 或 uniform 映射到合适的非线性区间
+        # Hidden layers
+
         self.W = nn.Parameter(torch.randn(hidden_dim, self.state_dim) * 1.5, requires_grad=False)
         self.b = nn.Parameter(torch.randn(hidden_dim) * 1.5, requires_grad=False)
 
-        # 2. 唯一可训练参数：线性输出权重 \beta
+
         self.beta = nn.Parameter(torch.zeros(hidden_dim, 1, requires_grad=True))
 
-        # 激活函数采用论文经典推荐：Tanh
+
         self.act = torch.tanh
 
     def _get_H(self, x):
-        """计算 ELM 隐藏层特征矩阵 H(x) = tanh(X W^T + b)"""
+        """Compute the ELM hidden-feature matrix H(x) = tanh(X W^T + b)."""
         return self.act(torch.matmul(x, self.W.t()) + self.b)
 
     def get_value(self, x):
         """
-        通过 TFC Constraint Expression 解析满足 V(0) = 0:
+        Use the TFC constrained expression to satisfy V(0) = 0 analytically:
         V_CE(x) = g(x) - g(0) = (H(x) - H(0)) * \beta
         """
         H_x = self._get_H(x)
@@ -159,8 +159,8 @@ class XTFC_PINN(nn.Module):
 
     def get_lambda(self, x):
         """
-        计算协状态 \Lambda = \nabla V(x)。
-        利用 ELM 结构进行解析快速求导 (极大地节约计算图开销并提升精度)：
+        Compute the costate \Lambda = \nabla V(x).
+        Use the ELM structure for efficient analytical differentiation:
         d/dx_i [tanh(Z)] = (1 - tanh^2(Z)) * W[:, i]
         """
         Z = torch.matmul(x, self.W.t()) + self.b
@@ -169,7 +169,7 @@ class XTFC_PINN(nn.Module):
 
         grads = []
         for i in range(self.state_dim):
-            # 对每一维状态求偏导
+
             dH_dxi = dH * self.W[:, i].unsqueeze(0)  # (batch_size, hidden_dim)
             dV_dxi = torch.matmul(dH_dxi, self.beta) # (batch_size, 1)
             grads.append(dV_dxi)
@@ -178,7 +178,7 @@ class XTFC_PINN(nn.Module):
         return Lambda
 
     def get_action(self, X):
-        """通过最优控制律公式求解 u^* = -0.5 * R^{-1} * G(X)^T * \Lambda"""
+        """Evaluate u^* = -0.5 * R^{-1} * G(X)^T * \Lambda from the optimal control law."""
         R = self.env.R
         u0 = torch.tensor(self.env.u0, dtype=X.dtype, device=X.device)
         Lambda = self.get_lambda(X).unsqueeze(2)  
@@ -193,8 +193,8 @@ class XTFC_PINN(nn.Module):
 
     def warm_start_lqr(self, X_sample):
         """
-        论文 IV.A/IV.B 核心技巧：利用 LQR 二次函数 V_guess = X^T P X 对 \beta 进行 Least-Squares 预训练，
-        提供高质量初始猜测，防止 HJB 非线性项导数发散。
+        Use the quadratic LQR function V_guess = X^T P X to warm-start \beta by least squares, following Sections IV.A--IV.B.
+        This provides a high-quality initial guess and prevents divergence of nonlinear HJB derivatives.
         """
         with torch.no_grad():
             A_mat = self.env.A
@@ -203,15 +203,15 @@ class XTFC_PINN(nn.Module):
             R_mat = self.env.R
             P_np = solve_continuous_are(A_mat, B_mat, Q_mat, R_mat)
             P_torch = torch.tensor(P_np, dtype=X_sample.dtype, device=X_sample.device)
-            # 目标猜测值 V_guess
+
             V_guess = torch.einsum('bi,ij,bj->b', X_sample, P_torch, X_sample).unsqueeze(1)
             
-            # 线性方程组 A * \beta = Y
+
             H_x = self._get_H(X_sample)
             H_0 = self._get_H(torch.zeros_like(X_sample))
             A = H_x - H_0
             
-            # 最小二乘求解 \beta
+
             beta_init = torch.linalg.lstsq(A, V_guess).solution
             self.beta.data.copy_(beta_init)
             print("X-TFC: Warm-start LQR initialization completed via Least-Squares.")
@@ -219,9 +219,9 @@ class XTFC_PINN(nn.Module):
 
 def get_hjb_residual_loss(model, X):
     """
-    计算 HJB PDE 残差损失 (论文 Eq. 7 & Eq. 28)
+    Compute the HJB PDE residual loss (Eqs. 7 and 28 of the reference).
     H(X, \Lambda) = L(X, u^*) + \Lambda^T f(X, u^*) = 0
-    由于 TFC 已经解析满足了 V(0)=0，此处绝对不需要添加边界条件损失！
+    Because the TFC expression satisfies V(0)=0 analytically, no additional boundary-condition loss is required.
     """
     Lambda = model.get_lambda(X)
     u_star = model.get_action(X)
@@ -231,11 +231,11 @@ def get_hjb_residual_loss(model, X):
     u0 = torch.tensor(model.env.u0, dtype=X.dtype, device=X.device)
     delta_u = u_star - u0
     
-    # 运行成本 L(X, u) = X^T Q X + u^T R u
+
     xQx = torch.einsum('bi,ij,bj->b', X, Q_torch, X)
     uRu = torch.einsum('bi,ij,bj->b', delta_u, R_torch, delta_u)
     
-    # 动力学项 \Lambda^T \dot{X}
+
     fxu = dynamics(X, u_star)
     lambda_fxu = (Lambda * fxu).sum(dim=1)
     penalty = get_penalty(X)
@@ -251,16 +251,16 @@ def train_xtfc():
     env = gym.make(args.env_id)
     xtfc = XTFC_PINN(env, hidden_dim=args.hidden_dim).to(args.device)
 
-    # 采样均匀分布的训练配点 (Collocation Points)
+
     low, high = -1.0, 1.0
     x_batch = np.random.uniform(low, high, (args.batch_size, env.observation_space.shape[0]))
     X_train = torch.from_numpy(x_batch).float().to(args.device)
 
-    # 1. 执行 Least-Squares 热启动
+
     xtfc.warm_start_lqr(X_train)
 
-    # 2. 使用 L-BFGS (拟牛顿迭代最小二乘法) 或 Adam 优化唯一变量 \beta
-    # 论文指出 X-TFC 的参数呈线性化特征，迭代收敛极快
+
+
     optimizer = optim.LBFGS([xtfc.beta], lr=1.0, max_iter=20, history_size=50, line_search_fn="strong_wolfe")
     
     print("Starting X-TFC Iterative Least-Squares Training...")
@@ -271,7 +271,7 @@ def train_xtfc():
             print(f"Time limit of 300s reached at step {step}. Stopping training.")
             break
             
-        # 为防止过拟合固定网格，每步微调重采样一部分点（但在一次 L-BFGS 步长线搜索内必须固定，否则 Hessian 发散）
+
         x_rand = np.random.uniform(low, high, (args.batch_size, env.observation_space.shape[0]))
         X_curr = torch.from_numpy(x_rand).float().to(args.device)
         def closure():
@@ -285,7 +285,7 @@ def train_xtfc():
         if step % 5 == 0:
             print(f"Iter {step*20}/{args.time_steps}, HJB Residual MSE Loss: {loss.item():.2e}")
 
-    # 保存 X-TFC 模型参数
+    # Model parameters
     model_dir = "model"
     os.makedirs(model_dir, exist_ok=True)
     model_path = os.path.join(model_dir, "xtfc_quadrotor3d_constrained.pth")
@@ -384,7 +384,7 @@ def monte_carlo_simulation():
     env_lqr.close()
     env_xtfc.close()
     
-    # 绘图部分使用 CHNN 相同的风格
+
     control_labels = [r'$T$', r'$p$', r'$q$', r'$r$']
     time_u = np.arange(horizon)
 
@@ -411,7 +411,7 @@ def monte_carlo_simulation():
     filename = "image/" + args.filename_prefix + "control_traj.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
-    # ========== 箱线图及统计 ==========
+
     final_dist_lqr = np.array([np.linalg.norm(traj[-1, 0:3]) for traj in all_traj_x_lqr])
     final_dist_xtfc = np.array([np.linalg.norm(traj[-1, 0:3]) for traj in all_traj_x_xtfc])
     success_mask_lqr = final_dist_lqr <= 0.1

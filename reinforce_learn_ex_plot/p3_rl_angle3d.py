@@ -10,6 +10,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import gymnasium as gym
+from rl_training_recording import (
+    save_learning_curve,
+    save_training_record,
+    stability_summary,
+    synchronize_device,
+)
 
 # ================== 图像设置 =======================
 mpl.rcParams['font.family'] = 'Times New Roman'
@@ -42,6 +48,7 @@ class Args:
     gae_lambda = 0.95
     device = "cuda" if torch.cuda.is_available() else "cpu"
     filename_prefix = "rl_angle3d_"
+    return_window_episodes = 20
 
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
@@ -108,7 +115,15 @@ def train_rl():
     next_obs = torch.Tensor(next_obs).to(Args.device)
     next_done = torch.zeros(1).to(Args.device)
 
-    start_time = time.time()
+    sampling_seconds = 0.0
+    running_episode_return = 0.0
+    completed_episode_returns = []
+    learning_curve_steps = []
+    rollout_mean_returns = []
+    rolling_mean_returns = []
+
+    synchronize_device(Args.device)
+    training_start = time.perf_counter()
     print(f"Starting PPO training for {Args.time_steps} steps...")
 
     for update in range(1, num_updates + 1):
@@ -116,6 +131,9 @@ def train_rl():
         #     print(f"Time limit of 30s reached at update {update}. Stopping training.")
         #     break
 
+        synchronize_device(Args.device)
+        sampling_start = time.perf_counter()
+        returns_completed_this_rollout = []
         for step in range(0, num_steps):
             global_step += 1
             obs[step] = next_obs
@@ -129,14 +147,32 @@ def train_rl():
             
             action_np = action.cpu().numpy().flatten()
             next_obs_np, reward, terminated, truncated, info = env.step(action_np)
+            running_episode_return += float(np.asarray(reward).reshape(-1)[0])
             
             rewards[step] = torch.tensor(reward).to(Args.device).view(-1)
             next_obs = torch.Tensor(next_obs_np).to(Args.device)
             next_done = torch.Tensor([terminated or truncated]).to(Args.device)
             
             if terminated or truncated:
+                completed_episode_returns.append(running_episode_return)
+                returns_completed_this_rollout.append(running_episode_return)
+                running_episode_return = 0.0
                 next_obs_np, _ = env.reset()
                 next_obs = torch.Tensor(next_obs_np).to(Args.device)
+
+        synchronize_device(Args.device)
+        sampling_seconds += time.perf_counter() - sampling_start
+        rollout_mean = (
+            float(np.mean(returns_completed_this_rollout))
+            if returns_completed_this_rollout else None
+        )
+        rolling_mean = (
+            float(np.mean(completed_episode_returns[-Args.return_window_episodes:]))
+            if completed_episode_returns else None
+        )
+        learning_curve_steps.append(global_step)
+        rollout_mean_returns.append(rollout_mean)
+        rolling_mean_returns.append(rolling_mean)
                 
         with torch.no_grad():
             next_value = agent.get_value(next_obs.unsqueeze(0)).reshape(1, -1)
@@ -189,13 +225,52 @@ def train_rl():
                 optimizer.step()
                 
         if update % 5 == 0:
-            print(f"Update: {update}/{num_updates}, Global Step: {global_step}, Policy Loss: {pg_loss.item():.4f}, Value Loss: {v_loss.item():.4f}")
+            print(f"Update: {update}/{num_updates}, Global Step: {global_step}, Policy Loss: {pg_loss.item():.4f}, Value Loss: {v_loss.item():.4f}, Rolling Mean Return: {rolling_mean if rolling_mean is not None else 'n/a'}")
+
+    synchronize_device(Args.device)
+    total_seconds = time.perf_counter() - training_start
+    training_seconds = max(0.0, total_seconds - sampling_seconds)
+    env.close()
 
     model_dir = "model"
     os.makedirs(model_dir, exist_ok=True)
     model_path = os.path.join(model_dir, "rl_angle3d.pth")
     torch.save(agent.state_dict(), model_path)
     print(f"RL PPO model saved to {model_path}")
+
+    curve_path = os.path.join("image", "rl_angle3d_learning_curve.png")
+    result_path = os.path.join("results", "rl_angle3d_training.json")
+    save_learning_curve(curve_path, learning_curve_steps, rollout_mean_returns,
+                        rolling_mean_returns, Args.return_window_episodes)
+    record = {
+        "environment": Args.env_id,
+        "device": str(Args.device),
+        "requested_total_timesteps": Args.time_steps,
+        "actual_total_timesteps": global_step,
+        "steps_per_rollout": Args.num_steps,
+        "learning_rate": Args.learning_rate,
+        "batch_size": Args.batch_size,
+        "ppo_epochs": Args.ppo_epochs,
+        "data_collection_seconds": sampling_seconds,
+        "training_seconds": training_seconds,
+        "total_seconds": total_seconds,
+        "return_window_episodes": Args.return_window_episodes,
+        "learning_curve": {
+            "environment_interactions": learning_curve_steps,
+            "rollout_mean_returns": rollout_mean_returns,
+            "rolling_mean_returns": rolling_mean_returns,
+            "completed_episode_count": len(completed_episode_returns),
+        },
+        "final_stability_summary": stability_summary(
+            learning_curve_steps, rolling_mean_returns
+        ),
+        "model_file": model_path,
+        "learning_curve_file": curve_path,
+    }
+    save_training_record(result_path, record)
+    print(f"Training record saved to {result_path}")
+    print(f"Data collection: {sampling_seconds:.2f} s; training: {training_seconds:.2f} s; total: {total_seconds:.2f} s.")
+    return record
 
 
 def monte_carlo_simulation():

@@ -53,7 +53,7 @@ class Args:
     # 总训练次数
     time_steps = 30000
     # 训练批次
-    batch_size = 1280
+    batch_size = 2048
     # 时间范围
     T = 1
     # 轨迹前向长度
@@ -106,7 +106,7 @@ def dynamics(X, U):
 
     return fxu
 
-_env_tmp = gym.make(Args.env_id)
+_env_tmp = gym.make(Args.env_id).unwrapped
 m = _env_tmp.metadata['m']
 g = _env_tmp.metadata['g']
 
@@ -180,10 +180,9 @@ def get_pfpx(X, U):
     return pfpx
 
 
-# Hamilton神经网络
 class HNN(nn.Module):
     def __init__(self, env):
-        self.env = env
+        self.env = env.unwrapped if hasattr(env, 'unwrapped') else env
         super().__init__()
 
         # 共享层
@@ -407,7 +406,7 @@ def lambda_zero_loss(model):
 
 
 def train_hnn():
-    env = gym.make(args.env_id)
+    env = gym.make(args.env_id).unwrapped
     hnn = HNN(env).to(args.device)
     model_dir = "model"
     model_path = os.path.join(model_dir, args.model_name)
@@ -509,7 +508,7 @@ def train_hnn():
 def plot_value():
     # 加载模型参数
     args = Args()
-    env = gym.make(args.env_id)
+    env = gym.make(args.env_id).unwrapped
     hnn = HNN(env)
     model_dir = "model"
     model_path = os.path.join(model_dir, args.model_name)
@@ -565,7 +564,7 @@ def plot_value():
 def plot_lambda():
     # 加载hnnv2_quadrotor3d_TM模型参数
     args = Args()
-    env = gym.make(args.env_id)
+    env = gym.make(args.env_id).unwrapped
     hnn = HNN(env)
     model_dir = "model"
     model_path = os.path.join(model_dir, args.model_name)
@@ -631,7 +630,7 @@ def simulate_once():
     # 仿真LQR和HNN控制效果
     args = Args()
     device = args.device
-    env_probe = gym.make(args.env_id, theoretic_mode=True)
+    env_probe = gym.make(args.env_id, theoretic_mode=True).unwrapped
 
     # 仿真参数
     horizon = int(env_probe.T / env_probe.dt)
@@ -653,7 +652,7 @@ def simulate_once():
 
     # 加载HNN模型
     hnn_path = "model/" + args.model_name
-    env_hnn = gym.make(args.env_id, theoretic_mode=True)
+    env_hnn = gym.make(args.env_id, theoretic_mode=True).unwrapped
     hnn = HNN(env_hnn).to(device)
     hnn.load_state_dict(torch.load(hnn_path, map_location=device))
     hnn.eval()
@@ -676,9 +675,9 @@ def simulate_once():
 
     # 初始化环境
     seed = np.random.randint(0, 10000000)
-    env_lqr = gym.make(args.env_id, theoretic_mode=True)
+    env_lqr = gym.make(args.env_id, theoretic_mode=True).unwrapped
     obs_lqr, _ = env_lqr.reset(seed=seed)
-    env_hnn = gym.make(args.env_id, theoretic_mode=True)
+    env_hnn = gym.make(args.env_id, theoretic_mode=True).unwrapped
     obs_hnn, _ = env_hnn.reset(seed=seed)  # 用同一个初始条件
 
     ret_lqr = 0.0
@@ -794,8 +793,8 @@ def monte_carlo_simulation():
     # torch.manual_seed(seed)
     num_episodes = 50
 
-    env_lqr = gym.make(args.env_id, theoretic_mode=True)
-    env_hnn = gym.make(args.env_id, theoretic_mode=True)
+    env_lqr = gym.make(args.env_id, theoretic_mode=True).unwrapped
+    env_hnn = gym.make(args.env_id, theoretic_mode=True).unwrapped
     horizon = int(env_lqr.T / env_lqr.dt)
 
     m = env_lqr.metadata['m']
@@ -1041,7 +1040,7 @@ def monte_carlo_simulation():
 
 if __name__ == "__main__":
     args = Args()
-    env = gym.make(args.env_id)
+    env = gym.make(args.env_id).unwrapped
     m = env.metadata['m']
     g = env.metadata['g']
     P_ref = env.P

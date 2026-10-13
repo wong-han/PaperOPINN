@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import gymnasium as gym
 from utils import DroneVisualizer
+from parallel_ppo_training_common import train_parallel_ppo
 import cmaps
 
 # ================== 图像设置 =======================
@@ -34,11 +35,14 @@ mpl.rcParams['grid.color'] = 'gray'
 
 class Args:
     env_id = "environment:quadrotor3d_TR_constrained"
+    seed = 2026
     learning_rate = 3e-4
-    time_steps = 1000000
-    num_steps = 2048
-    batch_size = 64
-    ppo_epochs = 10
+    time_steps = 2000000
+    num_envs = 8
+    num_steps = 2000
+    minibatch_size = 2048
+    gradient_updates_per_rollout = 256
+    return_window_episodes = 50
     clip_param = 0.2
     gamma = 0.99
     gae_lambda = 0.95
@@ -87,8 +91,8 @@ class RLNet(nn.Module):
         return self.actor_mean(x)
 
 
-def train_rl():
-    env = gym.make(Args.env_id, theoretic_mode=True, rl_mode=True)
+def _train_rl_serial_legacy():
+    env = gym.make(Args.env_id, theoretic_mode=False, rl_mode=True).unwrapped
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
     
@@ -106,7 +110,7 @@ def train_rl():
     global_step = 0
     num_updates = Args.time_steps // num_steps
     
-    next_obs, _ = env.reset(theoretic_mode=True, rl_mode=True)
+    next_obs, _ = env.reset(theoretic_mode=False, rl_mode=True)
     next_obs = torch.Tensor(next_obs).to(Args.device)
     next_done = torch.zeros(1).to(Args.device)
 
@@ -208,15 +212,26 @@ def train_rl():
     print(f"RL PPO model saved to {model_path}")
 
 
+def train_rl():
+    return train_parallel_ppo(
+        args=Args,
+        agent_class=RLNet,
+        script_dir=os.path.dirname(os.path.abspath(__file__)),
+        model_filename="rl_quadrotor3d_constrained.pth",
+        result_filename="constrained_rl_parallel_training.json",
+        learning_curve_filename="rl_quadrotor3d_constrained_training_curve.svg",
+    )
+
+
 
 def simulate_once():
     args = Args()
     device = args.device
 
-    env_lqr = gym.make(args.env_id, theoretic_mode=True)
-    env_rl = gym.make(args.env_id, theoretic_mode=True)
-    env_sp = gym.make(args.env_id, theoretic_mode=True)
-    env_hnn = gym.make(args.env_id, theoretic_mode=True)
+    env_lqr = gym.make(args.env_id, theoretic_mode=True).unwrapped
+    env_rl = gym.make(args.env_id, theoretic_mode=True).unwrapped
+    env_sp = gym.make(args.env_id, theoretic_mode=True).unwrapped
+    env_hnn = gym.make(args.env_id, theoretic_mode=True).unwrapped
 
     horizon = int(env_lqr.T / env_lqr.dt)
     A_np = env_lqr.A
@@ -468,9 +483,9 @@ def monte_carlo_simulation():
     device = args.device
     num_episodes = 50
 
-    env_lqr = gym.make(args.env_id, theoretic_mode=True)
-    env_sp = gym.make(args.env_id, theoretic_mode=True)
-    env_rl = gym.make(args.env_id, theoretic_mode=True)
+    env_lqr = gym.make(args.env_id, theoretic_mode=True).unwrapped
+    env_sp = gym.make(args.env_id, theoretic_mode=True).unwrapped
+    env_rl = gym.make(args.env_id, theoretic_mode=True).unwrapped
     horizon = int(env_lqr.T / env_lqr.dt)
 
     A = env_lqr.A
@@ -520,7 +535,7 @@ def monte_carlo_simulation():
     # 3. Load HNN
     try:
         from pihnn_experiments_plot.p4_hnn_quadrotor3d_TR import HNN, get_pfpu
-        env_hnn = gym.make(args.env_id, theoretic_mode=True)
+        env_hnn = gym.make(args.env_id, theoretic_mode=True).unwrapped
         hnn_model = HNN(env_hnn).to(device)
         hnn_path = os.path.join("model", "hnn_quadrotor3d_TR_v2_paperplot.pth")
         if os.path.exists(hnn_path):

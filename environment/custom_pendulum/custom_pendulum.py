@@ -3,8 +3,7 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import torch
-import casadi as ca
-from acados_template import AcadosModel
+import sympy as sp
 import scipy
 
 class Pendulum(gym.Env):
@@ -23,7 +22,6 @@ class Pendulum(gym.Env):
         super().__init__()
 
         # 模型设置
-        self.acados_model = NonmialAcadosModel(self.metadata)
         self.system_torch_dynamics = SystemTorchDynamics(self.metadata)
         # 状态空间: [theta, theta_dot]
         self.state_low = np.array([-np.pi, -80])
@@ -40,7 +38,7 @@ class Pendulum(gym.Env):
         self.state[1] = 0.0  # 初始角速度为0
 
         # 模型参数
-        self.A, self.B = linearize_at_origin(self.acados_model)
+        self.A, self.B = linearize_at_origin(self.metadata)
 
         # 控制参数
         self.u0 = np.array([0.0])
@@ -231,68 +229,30 @@ class SystemTorchDynamics(torch.nn.Module):
         dxdt = torch.stack([dtheta, dtheta_dot], dim=1)
         return dxdt
 
-class NonmialAcadosModel():
-    def __init__(self, metadata):
-        self.metadata = metadata
-        self.model = self.export_acados_model()
-
-    def export_acados_model(self):
-        nx = self.metadata['nx']
-        nu = self.metadata['nu']
-        m = self.metadata['m']
-        l = self.metadata['length']
-        beta = self.metadata['beta']
-        g = self.metadata['g']
-
-        fx = ca.SX.sym('x_dot', nx)
-        x = ca.SX.sym('x', nx)
-        u = ca.SX.sym('u', nu)
-
-        theta = x[0]
-        theta_dot = x[1]
-        u_val = u[0]
-
-        dtheta = theta_dot
-        dtheta_dot = (m * g * l * ca.sin(theta) - beta * theta_dot + u_val) / (m * l ** 2)
-
-        x_dot = ca.vertcat(dtheta, dtheta_dot)
-
-        model = AcadosModel()
-        model.f_expl_expr = x_dot
-        model.f_impl_expr = fx - x_dot
-        model.x_dot = fx
-        model.x = x
-        model.u = u
-        model.p = []
-        model.name = "pendulum"
-
-        return model
-
-
-def linearize_at_origin(acados_model):
+def linearize_at_origin(metadata):
     """
-    计算动力学模型在零点（x=0, u=0）的线性化矩阵A和B
-    :param model: AcadosModel对象
+    计算动力学模型在零点（x=0, u=0）的线性化矩阵A和B (使用 SymPy 计算)
+    :param metadata: 环境参数字典
     :return: 数值矩阵A, B
     """
-    model = acados_model.model
-    # 提取符号变量和表达式
-    x = model.x
-    u = model.u
-    f_expl = model.f_expl_expr  # 显式动力学: dx/dt = f_expl(x, u)
+    theta, theta_dot, u_val = sp.symbols('theta theta_dot u_val')
+    m = metadata['m']
+    l = metadata['length']
+    beta = metadata['beta']
+    g = metadata['g']
 
-    # 计算雅可比矩阵 (符号形式)
-    A_sym = ca.jacobian(f_expl, x)  # A = df/dx
-    B_sym = ca.jacobian(f_expl, u)  # B = df/du
+    x = sp.Matrix([theta, theta_dot])
+    u = sp.Matrix([u_val])
 
-    # 创建函数用于数值计算
-    A_func = ca.Function('A_func', [x, u], [A_sym])
-    B_func = ca.Function('B_func', [x, u], [B_sym])
+    dtheta = theta_dot
+    dtheta_dot = (m * g * l * sp.sin(theta) - beta * theta_dot + u_val) / (m * l ** 2)
+    f = sp.Matrix([dtheta, dtheta_dot])
 
-    # 在零点求值 (x=0, u=0)
-    x0 = np.zeros(model.x.size()[0])
-    u0 = np.zeros(model.u.size()[0])
-    A0 = A_func(x0, u0).full()  # 转换为NumPy数组
-    B0 = B_func(x0, u0).full()
+    A_sym = f.jacobian(x)
+    B_sym = f.jacobian(u)
+
+    subs_dict = {theta: 0.0, theta_dot: 0.0, u_val: 0.0}
+    A0 = np.array(A_sym.subs(subs_dict), dtype=np.float64)
+    B0 = np.array(B_sym.subs(subs_dict), dtype=np.float64)
 
     return A0, B0

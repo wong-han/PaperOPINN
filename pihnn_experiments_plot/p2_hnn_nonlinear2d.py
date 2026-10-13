@@ -48,7 +48,7 @@ class Args:
     # 总训练次数
     time_steps = 20000
     # 训练批次
-    batch_size = 1280
+    batch_size = 2048
     # 是否使用GPU
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # 文件名前缀
@@ -87,10 +87,9 @@ def get_pfpx(X, U):
     return pfpx
 
 
-# Hamilton神经网络
 class HNN(nn.Module):
     def __init__(self, env):
-        self.env = env
+        self.env = env.unwrapped if hasattr(env, 'unwrapped') else env
         super().__init__()
 
         # 共享层
@@ -100,13 +99,11 @@ class HNN(nn.Module):
             layer_init(nn.Linear(64, 64)),
             nn.Tanh(),
         )
-        self.state_dim = env.observation_space.shape[0]
-        self.value_element = nn.Sequential(
+        self.value_part = nn.Sequential(
             layer_init(nn.Linear(64, 64)),
             nn.Tanh(),
-            layer_init(nn.Linear(64, self.state_dim * (self.state_dim + 1) // 2), std=1.0),
+            layer_init(nn.Linear(64, 1), std=1.0),
         )
-        self.indices = [(i, j) for i in range(self.state_dim) for j in range(i + 1)]
 
         self.lambda_part = nn.Sequential(
             layer_init(nn.Linear(64, 64)),
@@ -121,23 +118,10 @@ class HNN(nn.Module):
         )
     
     def get_value(self, x):
-        # zero_point = torch.zeros_like(x)
-        # x_feature = self.shared_net(x)
-        # zero_point_feature = self.shared_net(zero_point)
-        # return self.value_part(x_feature) - self.value_part(zero_point_feature)
-        x = x - torch.tensor([0, 0], dtype=x.dtype, device=x.device)
-        batch_size = x.shape[0]
+        zero_point = torch.zeros_like(x)
         x_feature = self.shared_net(x)
-        elements = self.value_element(x_feature)
-        L = torch.zeros(batch_size, self.state_dim, self.state_dim, device=x.device)
-        for idx, (i, j) in enumerate(self.indices):
-            L[:, i, j] += elements[:, idx]
-
-        L_T = L.transpose(1, 2)
-        intermediate = torch.bmm(x.unsqueeze(1), L_T).squeeze(1)
-        value = (intermediate ** 2).sum(dim=1)
-        value = value.unsqueeze(dim=1)
-        return value
+        zero_point_feature = self.shared_net(zero_point)
+        return self.value_part(x_feature) - self.value_part(zero_point_feature)
 
     
     def get_lambda(self, x):
@@ -318,29 +302,13 @@ def train_hnn():
     print(f"Training started at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
 
     for step in range(args.time_steps):
-        if time.time() - start_time > 30:
-            print(f"Time limit of 30s reached at step {step}. Stopping training.")
-            model_dir = "model"
-            os.makedirs(model_dir, exist_ok=True)
-            model_path = os.path.join(model_dir, "hnn_nonlinear2d.pth")
-            torch.save(hnn.state_dict(), model_path)
-            print(f"HNN model saved to {model_path}")
-            break
-
         # 采样数据
-        low = -3.0
-        high = 3.0
+        low = -4.0
+        high = 4.0
         x_batch = np.random.uniform(low, high, (args.batch_size, env.observation_space.shape[0]))
         X = torch.from_numpy(x_batch).float().to(args.device)
         X.requires_grad_(True)
         # 计算损失函数
-        # posi_v_loss = positive_v_loss(hnn, X)
-        # v_lam_loss = value_lambda_loss(hnn, X)
-        # # lam_zero_loss = lambda_zero_loss(pinn)
-        # dyn_loss = dynamics_loss(hnn, X)
-        # lam_dot_loss = lambda_dot_loss(hnn, X)
-        # H_loss = direct_H_loss(hnn, X)
-        # loss = posi_v_loss + v_lam_loss + dyn_loss + lam_dot_loss + H_loss
         loss = get_all_loss(hnn, X) #+ lambda_zero_loss(hnn)
 
         # 更新参数
@@ -936,8 +904,8 @@ def simulate_once():
 
 if __name__ == "__main__":
     args = Args()
-    # train_hnn()
+    train_hnn()
     plot_value()
     plot_lambda()
-    simulate_once()
+    # simulate_once()
     # monte_carlo_simulation()

@@ -3,8 +3,6 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import torch
-import casadi as ca
-from acados_template import AcadosModel
 
 
 class AngleRate(gym.Env):
@@ -22,7 +20,6 @@ class AngleRate(gym.Env):
         super().__init__()
         
         # 模型设置
-        self.acados_model = NonmialAcadosModel(self.metadata)
         self.system_torch_dynamics = SystemTorchDynamics(self.metadata)
 
         # 状态范围：角度[-pi, pi]，角速度[-5, 5]
@@ -247,41 +244,3 @@ class SystemTorchDynamics(torch.nn.Module):
         dr = tau_z
 
         return torch.stack([dphi, dtheta, dpsi, dp, dq, dr], dim=1)
-
-
-class NonmialAcadosModel():
-    def __init__(self, metadata):
-        self.metadata = metadata
-        self.model = self.export_acados_model()
-
-    def export_acados_model(self):
-        nx = self.metadata['nx']
-        nu = self.metadata['nu']
-
-        fx = ca.SX.sym('x_dot', nx)
-        x = ca.SX.sym('x', nx)
-        u = ca.SX.sym('u', nu)
-
-        phi, theta, psi, p, q, r = x[0], x[1], x[2], x[3], x[4], x[5]
-        tau_x, tau_y, tau_z = u[0], u[1], u[2]
-
-        dphi = p + ca.tan(theta) * (ca.sin(phi) * q + ca.cos(phi) * r)
-        dtheta = ca.cos(phi) * q - ca.sin(phi) * r
-        dpsi = (ca.sin(phi) / ca.cos(theta)) * q + (ca.cos(phi) / ca.cos(theta)) * r
-
-        dp = tau_x
-        dq = tau_y
-        dr = tau_z
-
-        x_dot = ca.vertcat(dphi, dtheta, dpsi, dp, dq, dr)
-
-        model = AcadosModel()
-        model.f_expl_expr = x_dot
-        model.f_impl_expr = fx - x_dot
-        model.x_dot = fx
-        model.x = x
-        model.u = u
-        model.p = []
-        model.name = "attitude_control"
-
-        return model

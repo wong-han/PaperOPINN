@@ -1,0 +1,89 @@
+{
+  "configuration": {
+    "experiment": "constrained_mlp",
+    "source_file": "/media/wonham/3A30AC0530ABC66B/Users/Lenovo/BUAA/research/存档/已发表/20250818-PMPInformedOC/Paper/npj Robotics/第2轮修改/PaperOPINN/sup_learn_ex_plot/p4_mlp_quadrotor3d_TR_constrained_parallel.py",
+    "source_sha256": "37f29f5d1a5bb1636a3a7e631a5fa8c611916499f7b22b8aed018453dddc754c",
+    "training_helper_sha256": "ec31576e0cc24b777308f5f6c9f422b716b32e5098a2854188c204cc304200b9",
+    "siren_sha256": null,
+    "dataset_state_file": "/media/wonham/3A30AC0530ABC66B/Users/Lenovo/BUAA/research/存档/已发表/20250818-PMPInformedOC/Paper/npj Robotics/第2轮修改/PaperOPINN/sup_learn_ex_plot/data/X_trajs_constrained.npy",
+    "dataset_action_file": "/media/wonham/3A30AC0530ABC66B/Users/Lenovo/BUAA/research/存档/已发表/20250818-PMPInformedOC/Paper/npj Robotics/第2轮修改/PaperOPINN/sup_learn_ex_plot/data/U_trajs_constrained.npy",
+    "dataset_state_sha256": "34c733dd0e71bb9513a03fef6a0d30ae1e9c0c2a082eac0887031b6956e3ec3a",
+    "dataset_action_sha256": "16aee8168d4137446e0dbe3cec46c2fcbb175b4e83e495a0ed3d07bf6b674854",
+    "architecture": "SPNet(\n  (net): Sequential(\n    (0): Linear(in_features=9, out_features=64, bias=True)\n    (1): Tanh()\n    (2): Linear(in_features=64, out_features=64, bias=True)\n    (3): Tanh()\n    (4): Linear(in_features=64, out_features=64, bias=True)\n    (5): Tanh()\n    (6): Linear(in_features=64, out_features=4, bias=True)\n  )\n)",
+    "parameters": 9220,
+    "environment": "environment:quadrotor3d_TR_constrained",
+    "device": "cuda",
+    "learning_rate": 0.001,
+    "optimizer": "Adam",
+    "batch_size": 2048,
+    "maximum_steps": 100000,
+    "evaluation_interval": 100,
+    "target_training_mse": 0.0001,
+    "required_target_checks": 5,
+    "metric": "full_training_mse",
+    "dataset_split": "none",
+    "training_time_excludes_full_dataset_mse": true
+  },
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "training_seconds_mean": 25.29746784339868,
+  "training_seconds_sd": 1.2118346148703296,
+  "sd_convention": "population standard deviation (ddof=0)",
+  "runs": [
+    {
+      "seed": 0,
+      "steps": 27200,
+      "training_seconds": 24.755131566003,
+      "training_wall_seconds": 25.720332232000146,
+      "full_dataset_mse_evaluation_seconds": 0.9679209919972891,
+      "stop_reason": "training_loss_target_sustained",
+      "target_reached": true,
+      "selected_model_training_mse": 8.298491811899842e-05
+    },
+    {
+      "seed": 1,
+      "steps": 28100,
+      "training_seconds": 25.16732038800137,
+      "training_wall_seconds": 26.09505147899972,
+      "full_dataset_mse_evaluation_seconds": 0.9313579219983694,
+      "stop_reason": "training_loss_target_sustained",
+      "target_reached": true,
+      "selected_model_training_mse": 8.076960937490867e-05
+    },
+    {
+      "seed": 2,
+      "steps": 31000,
+      "training_seconds": 27.6009071590006,
+      "training_wall_seconds": 28.624468967999746,
+      "full_dataset_mse_evaluation_seconds": 1.0262794569989637,
+      "stop_reason": "training_loss_target_sustained",
+      "target_reached": true,
+      "selected_model_training_mse": 7.608673315599906e-05
+    },
+    {
+      "seed": 3,
+      "steps": 28800,
+      "training_seconds": 24.926854038992133,
+      "training_wall_seconds": 25.85872176699968,
+      "full_dataset_mse_evaluation_seconds": 0.934554458007824,
+      "stop_reason": "training_loss_target_sustained",
+      "target_reached": true,
+      "selected_model_training_mse": 7.527467512219666e-05
+    },
+    {
+      "seed": 4,
+      "steps": 28300,
+      "training_seconds": 24.0371260649963,
+      "training_wall_seconds": 24.955578597000112,
+      "full_dataset_mse_evaluation_seconds": 0.9210911950040099,
+      "stop_reason": "training_loss_target_sustained",
+      "target_reached": true,
+      "selected_model_training_mse": 8.11417150434054e-05
+    }
+  ]
+}

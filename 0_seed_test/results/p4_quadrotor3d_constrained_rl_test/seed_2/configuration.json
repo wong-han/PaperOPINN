@@ -1,0 +1,32 @@
+{
+  "source_file": "/media/wonham/3A30AC0530ABC66B/Users/Lenovo/BUAA/research/存档/已发表/20250818-PMPInformedOC/Paper/npj Robotics/第2轮修改/PaperOPINN/reinforce_learn_ex_plot/p4_rl_quadrotor3d_TR_constrained.py",
+  "settings": {
+    "env_id": "environment:quadrotor3d_TR_constrained",
+    "learning_rate": 0.0003,
+    "time_steps": 2000000,
+    "num_envs": 8,
+    "num_steps": 2000,
+    "minibatch_size": 2048,
+    "gradient_updates_per_rollout": 256,
+    "return_window_episodes": 50,
+    "clip_param": 0.2,
+    "gamma": 0.99,
+    "gae_lambda": 0.95,
+    "device": "cuda",
+    "filename_prefix": "rl_quadrotor3d_constrained_"
+  },
+  "source_hashes": {
+    "reinforce_learn_ex_plot/p4_rl_quadrotor3d_TR_constrained.py": "94263ec2924c6cd5d372dd89302a6cf484d44db4b02d7544e1f71e51daa88890",
+    "reinforce_learn_ex_plot/parallel_ppo_training_common.py": "8e92aef66932b2aa5840c0c72a5fd15dcd08947403091dea9430e5bff59cb911",
+    "environment/__init__.py": "1ddb1d24bc1a0cfb89e6d2236d0caf56f902e1139a0bf0bf2e798f9e58f6c10c",
+    "environment/quadrotor3d_TR_constrained/__init__.py": "06c303faba104c893df3cb740d7b9ba104b6a09c86042453824a180803d26a2c",
+    "environment/quadrotor3d_TR_constrained/quadrotor3d_TR.py": "c178d71fb52095d5c573cb2e8629f865251cd7382220204dae999c3db04a747e"
+  },
+  "reward_mode": {
+    "theoretic_mode": false,
+    "rl_mode": true
+  },
+  "curve_metric": "rolling mean of completed training episode returns (shaped reward)",
+  "seed_control": "Python, NumPy, PyTorch; vector environments reset with seed + env index",
+  "timing_scope": "Original helper: training loop through environment close; excludes initialization, model saving and plots"
+}

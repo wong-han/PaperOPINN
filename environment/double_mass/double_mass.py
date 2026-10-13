@@ -3,8 +3,6 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import torch
-import casadi as ca
-from acados_template import AcadosModel, AcadosOcp
 
 class DoubleMass(gym.Env):
     metadata = {}
@@ -24,7 +22,6 @@ class DoubleMass(gym.Env):
         super().__init__()
         
         # 模型设置
-        self.acados_model = NonmialAcadosModel(self.metadata)
         self.system_torch_dynamics = SystemTorchDynamics(self.metadata)
         self.observation_space = spaces.Box(low=-5.0, high=5.0, shape=(self.metadata['nx'],), dtype=np.float64)
         self.action_space = spaces.Box(low=-5.0, high=5.0, shape=(self.metadata['nu'],), dtype=np.float64)
@@ -220,52 +217,3 @@ class SystemTorchDynamics(torch.nn.Module):
         Ax = torch.matmul(x, A.T)
         Bu = torch.matmul(u, B.T)
         return Ax + Bu
-        
-class NonmialAcadosModel():
-    def __init__(self, metadata):
-        self.metadata = metadata
-        self.model = self.export_acados_model()
-
-    def export_acados_model(self):
-        a1 = self.metadata['a1']
-        a2 = self.metadata['a2']
-        a3 = self.metadata['a3']
-        beta1 = self.metadata['beta1']
-        beta2 = self.metadata['beta2']
-        b1 = self.metadata['b1']
-        b2 = self.metadata['b2']
-        nx = self.metadata['nx']
-        nu = self.metadata['nu']
-
-        fx = ca.SX.sym('x_dot', nx)
-        x = ca.SX.sym('x', nx)
-        u = ca.SX.sym('u', nu)
-        
-        A = ca.DM([
-            [0, 1, 0, 0],
-            [-(a1 + a2), -beta1, a2, 0],
-            [0, 0, 0, 1],
-            [a2, 0, -(a2 + a3), beta2]
-        ])
-
-        B = ca.DM([
-            [0, 0],
-            [b1, 0],
-            [0, 0],
-            [0, b2]
-        ])
-
-        x_dot = A @ x + B @ u
-        model = AcadosModel()
-        model.f_expl_expr = x_dot
-        model.f_impl_expr = fx - x_dot
-        model.x_dot = fx
-        model.x = x
-        model.u = u
-        model.p = []
-        model.name = "double_mass"
-
-        return model
-
-
-

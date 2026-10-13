@@ -3,11 +3,10 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import torch
-import casadi as ca
-from acados_template import AcadosModel, AcadosOcp
 
 class Linear2D(gym.Env):
     metadata = {}
+    metadata['render_modes'] = []
     metadata['nx'] = 2
     metadata['nu'] = 1
     metadata['a1'] = 0.0
@@ -23,13 +22,12 @@ class Linear2D(gym.Env):
         super().__init__()
         
         # 模型设置
-        self.acados_model = NonmialAcadosModel(self.metadata)
         self.system_torch_dynamics = SystemTorchDynamics(self.metadata)
         self.observation_space = spaces.Box(low=-5.0, high=5.0, shape=(self.metadata['nx'],), dtype=np.float64)
         self.action_space = spaces.Box(low=-10.0, high=10.0, shape=(self.metadata['nu'],), dtype=np.float64)
 
-        # 在observation_space范围内随机生成一个状态
-        self.state = 0.6 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
+        # Default initial state; reset() uses the same [-4, 4] range.
+        self.state = self.np_random.uniform(-4.0, 4.0, size=self.metadata['nx'])
 
         # 模型参数
         model_param = options.get('model_param')
@@ -102,8 +100,11 @@ class Linear2D(gym.Env):
         info['data'] = deepcopy(self.data)
         return info
 
-    def reset(self, seed=None, options={}, rl_mode=False):
-        # 仿真设置
+    def reset(self, seed=None, options={}, rl_mode=True):
+        # rl_mode is retained only for API compatibility.  The linear-system
+        # reset distribution and theoretical stage cost do not depend on it.
+        if options is not None and 'rl_mode' in options:
+            rl_mode = bool(options['rl_mode'])
         self.rl_mode = rl_mode
 
         self.t = 0.0
@@ -117,7 +118,7 @@ class Linear2D(gym.Env):
         if init_state is not None:
             self.state = init_state
         else:
-            self.state = 0.7 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
+            self.state = self.np_random.uniform(-4.0, 4.0, size=self.metadata['nx'])
         # 模型参数
         if options is not None:
             model_param = options.get('model_param')
@@ -176,11 +177,9 @@ class Linear2D(gym.Env):
             dxdt = self.A @ self.state + self.B @ action + self.disturbance()
             self.state = self.state + dxdt * self.dt
             # 奖励函数
-            reward = -(self.state.T @ self.Q @ self.state + action.T @ self.R @ action) * self.dt + 1 * self.dt * self.rl_mode
+            reward = -(self.state.T @ self.Q @ self.state + action.T @ self.R @ action) * self.dt
             if np.all(np.abs(self.state) < np.array([0.01, 0.01])):
                 terminated = True
-                P = np.array([[np.sqrt(3), 1.0], [1.0, np.sqrt(3)]])
-                reward += 10 #- (self.state.T @ P @ self.state) * self.rl_mode
             else:
                 terminated = False
         else:
@@ -188,23 +187,19 @@ class Linear2D(gym.Env):
             self.state = self.state + dxdt * self.dt
             delta_state = self.state - self.state_d
             # 奖励函数
-            reward = -(delta_state @ self.Q @ delta_state + action @ self.R @ action) * self.dt + 10 * self.dt * self.rl_mode
+            reward = -(delta_state @ self.Q @ delta_state + action @ self.R @ action) * self.dt
             if np.all(np.abs(delta_state) < np.array([0.01, 0.01])):
                 terminated = True
-                reward += 100 * self.rl_mode
             else:
                 terminated = False
         if not self.observation_space.contains(self.state):
             # print("crashed")
             crashed = True
-            reward -= 10 * self.rl_mode
             self.state = old_state
         else:
             crashed = False
         if self.t > self.T:
             truncated = True
-            # P = np.array([[np.sqrt(3), 1.0], [1.0, np.sqrt(3)]])
-            # reward +=  - (self.state.T @ P @ self.state) * self.rl_mode
         else:
             truncated = False
         # 信息
@@ -331,47 +326,3 @@ class SystemTorchDynamics(torch.nn.Module):
         Ax = torch.matmul(x, A.T)
         Bu = torch.matmul(u, B.T)
         return Ax + Bu
-        
-class NonmialAcadosModel():
-    def __init__(self, metadata):
-        self.metadata = metadata
-        self.model = self.export_acados_model()
-
-    def export_acados_model(self):
-        a1 = self.metadata['a1']
-        a2 = self.metadata['a2']
-        a3 = self.metadata['a3']
-        a4 = self.metadata['a4']
-        b1 = self.metadata['b1']
-        b2 = self.metadata['b2']
-        nx = self.metadata['nx']
-        nu = self.metadata['nu']
-
-        fx = ca.SX.sym('x_dot', nx)
-        x = ca.SX.sym('x', nx)
-        u = ca.SX.sym('u', nu)
-        
-        A = ca.DM([
-            [a1, a2],
-            [a3, a4]
-        ])
-
-        B = ca.DM([
-            [b1],
-            [b2]
-        ])
-
-        x_dot = A @ x + B @ u
-        model = AcadosModel()
-        model.f_expl_expr = x_dot
-        model.f_impl_expr = fx - x_dot
-        model.x_dot = fx
-        model.x = x
-        model.u = u
-        model.p = []
-        model.name = "linear_2d"
-
-        return model
-
-
-

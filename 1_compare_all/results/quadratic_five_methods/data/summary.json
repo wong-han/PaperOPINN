@@ -1,0 +1,99 @@
+{
+  "environment": "environment:quadrotor3d_TR-v0",
+  "episodes": 50,
+  "seed": 2222,
+  "dt": 0.01,
+  "horizon_steps": 800,
+  "success_position_tolerance": 0.1,
+  "evaluation_modes": {
+    "theoretic_mode": true,
+    "rl_mode": false
+  },
+  "termination_policy": "fixed horizon; flags recorded, not used for early stopping; nonfinite rollouts aborted",
+  "cost_definition": "J = -sum(environment reward); constrained cost includes environment penalty",
+  "plot_population": "successful episodes only, separately for each method",
+  "constraint_metric": "log10(abs(min_y) + 1e-8), legacy convention; not violation depth",
+  "models": {
+    "MLP": {
+      "file": "C:\\Users\\Lenovo\\BUAA\\research\\存档\\已发表\\20250818-PMPInformedOC\\Paper\\npj Robotics\\第2轮修改\\PaperOPINN\\sup_learn_ex_plot\\model\\mlp_quadrotor3d.pth",
+      "sha256": "002caae5799f1c822d650617071e2909a24222b60d40d37b42e36be7a5f74575",
+      "modified": 1791622308.1585355,
+      "architecture_source": "C:\\Users\\Lenovo\\BUAA\\research\\存档\\已发表\\20250818-PMPInformedOC\\Paper\\npj Robotics\\第2轮修改\\PaperOPINN\\sup_learn_ex_plot\\p4_mlp_quadrotor3d_TR_parallel.py"
+    },
+    "SIREN": {
+      "file": "C:\\Users\\Lenovo\\BUAA\\research\\存档\\已发表\\20250818-PMPInformedOC\\Paper\\npj Robotics\\第2轮修改\\PaperOPINN\\sup_learn_ex_plot\\model\\siren_quadrotor3d.pth",
+      "sha256": "9796f1c8bcfd1c1e57bece4a70318a5767f5e0863b1e016e0ed22d795f21ced5",
+      "modified": 1791622386.1575508,
+      "architecture_source": "C:\\Users\\Lenovo\\BUAA\\research\\存档\\已发表\\20250818-PMPInformedOC\\Paper\\npj Robotics\\第2轮修改\\PaperOPINN\\sup_learn_ex_plot\\p4_siren_quadrotor3d_TR_parallel.py"
+    },
+    "RL": {
+      "file": "C:\\Users\\Lenovo\\BUAA\\research\\存档\\已发表\\20250818-PMPInformedOC\\Paper\\npj Robotics\\第2轮修改\\PaperOPINN\\reinforce_learn_ex_plot\\model\\rl_quadrotor3d.pth",
+      "sha256": "8ff1422790e1ca1b61b6997d2067713c7903fc13c47652adecb00924adb20566",
+      "modified": 1791462783.4517326,
+      "architecture_source": "C:\\Users\\Lenovo\\BUAA\\research\\存档\\已发表\\20250818-PMPInformedOC\\Paper\\npj Robotics\\第2轮修改\\PaperOPINN\\reinforce_learn_ex_plot\\p4_rl_quadrotor3d_TR.py"
+    },
+    "OPINN": {
+      "file": "C:\\Users\\Lenovo\\BUAA\\research\\存档\\已发表\\20250818-PMPInformedOC\\Paper\\npj Robotics\\第2轮修改\\PaperOPINN\\pihnn_experiments_plot\\model\\hnn_quadrotor3d_TR_v2_paperplot.pth",
+      "sha256": "afef2bd3e61103cdda778767bcfe6c239453f713abf8d8b7b633f4ebe5016891",
+      "modified": 1791553800.8314369,
+      "architecture_source": "C:\\Users\\Lenovo\\BUAA\\research\\存档\\已发表\\20250818-PMPInformedOC\\Paper\\npj Robotics\\第2轮修改\\PaperOPINN\\pihnn_experiments_plot\\p4_hnn_quadrotor3d_TR.py"
+    }
+  },
+  "methods": {
+    "LQR": {
+      "success_rate": 1.0,
+      "successful_episodes": 50,
+      "nonfinite_episodes": 0,
+      "J_successful_only": {
+        "count": 50,
+        "mean": 8.438270319099413,
+        "sd": 4.956499965554738
+      },
+      "log_abs_ymin_successful_only": null
+    },
+    "SIREN": {
+      "success_rate": 1.0,
+      "successful_episodes": 50,
+      "nonfinite_episodes": 0,
+      "J_successful_only": {
+        "count": 50,
+        "mean": 6.934599852129128,
+        "sd": 3.209942358452688
+      },
+      "log_abs_ymin_successful_only": null
+    },
+    "MLP": {
+      "success_rate": 1.0,
+      "successful_episodes": 50,
+      "nonfinite_episodes": 0,
+      "J_successful_only": {
+        "count": 50,
+        "mean": 6.88275815831485,
+        "sd": 3.2069146659781453
+      },
+      "log_abs_ymin_successful_only": null
+    },
+    "RL": {
+      "success_rate": 0.98,
+      "successful_episodes": 49,
+      "nonfinite_episodes": 0,
+      "J_successful_only": {
+        "count": 49,
+        "mean": 8.72668835443716,
+        "sd": 4.49578306372619
+      },
+      "log_abs_ymin_successful_only": null
+    },
+    "OPINN": {
+      "success_rate": 1.0,
+      "successful_episodes": 50,
+      "nonfinite_episodes": 0,
+      "J_successful_only": {
+        "count": 50,
+        "mean": 7.127911987644344,
+        "sd": 3.458103881283699
+      },
+      "log_abs_ymin_successful_only": null
+    }
+  }
+}

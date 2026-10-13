@@ -1,0 +1,17 @@
+{
+  "problem": "constrained",
+  "seed": 42,
+  "target_trajectories": 200,
+  "valid_trajectories": 200,
+  "generation_attempts": 250,
+  "samples": 64323,
+  "workers": 24,
+  "max_trajectory_seconds": 5.0,
+  "terminal_position_velocity_l2_tolerance": 0.01,
+  "trajectories_reaching_terminal_tolerance": 200,
+  "terminal_error_mean": 0.009853556956864162,
+  "terminal_error_std": 0.00010290574375700641,
+  "data_generation_seconds": 355.5618397510002,
+  "state_file": "/media/wonham/3A30AC0530ABC66B/Users/Lenovo/BUAA/research/存档/已发表/20250818-PMPInformedOC/Paper/npj Robotics/第2轮修改/PaperOPINN/sup_learn_ex_plot/data/X_trajs_constrained.npy",
+  "action_file": "/media/wonham/3A30AC0530ABC66B/Users/Lenovo/BUAA/research/存档/已发表/20250818-PMPInformedOC/Paper/npj Robotics/第2轮修改/PaperOPINN/sup_learn_ex_plot/data/U_trajs_constrained.npy"
+}

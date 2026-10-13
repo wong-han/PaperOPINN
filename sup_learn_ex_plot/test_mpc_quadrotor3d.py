@@ -12,7 +12,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 from p4_sp_quadrotor3d_TR import setup_casadi_mpc, N
 
 def test_mpc():
-    env = gym.make("environment:quadrotor3d_TR-v0")
+    env = gym.make("environment:quadrotor3d_TR-v0").unwrapped
     
     # 随机初始化
     init_state = np.random.uniform(-1.0, 1.0, 9)

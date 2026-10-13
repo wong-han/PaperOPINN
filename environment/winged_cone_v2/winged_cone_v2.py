@@ -3,8 +3,7 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import torch
-import casadi as ca
-from acados_template import AcadosModel, AcadosOcp
+import sympy as sp
 import scipy
 
 
@@ -22,7 +21,6 @@ class WingedCone(gym.Env):
         super().__init__()
         
         # 模型设置
-        self.acados_model = NonmialAcadosModel(self.metadata)
         self.system_torch_dynamics = SystemTorchDynamics(self.metadata)
         self.state_low = np.array([-3, -0.6])
         self.state_high = np.array([3, 0.6])
@@ -34,7 +32,7 @@ class WingedCone(gym.Env):
         self.state = 0.5 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
 
         # 模型参数
-        self.A, self.B = linearize_at_origin(self.acados_model)
+        self.A, self.B = linearize_at_origin(self.metadata)
 
         # 控制参数（仍然使用单位阵）
         control_param = options.get('control_param')
@@ -203,64 +201,26 @@ class SystemTorchDynamics(torch.nn.Module):
         dx2 = 1.122954276 * torch.exp(-(x1 + 110) / 24) * torch.sqrt(sqrt_arg) * (alpha + 1.802274) - 0.02069 * sqrt_arg
         return torch.stack([dx1, dx2], dim=1)
         
-class NonmialAcadosModel():
-    def __init__(self, metadata):
-        self.metadata = metadata
-        self.model = self.export_acados_model()
-
-    def export_acados_model(self):
-        nx = self.metadata['nx']
-        nu = self.metadata['nu']
-
-        fx = ca.SX.sym('x_dot', nx)
-        x = ca.SX.sym('x', nx)
-        u = ca.SX.sym('u', nu)
-        
-        # 新的非线性动力学
-        x1 = x[0]
-        x2 = x[1]
-        alpha = u[0]
-        sqrt_arg = 1 - (x2 / 15.06) ** 2
-        dx1 = x2
-        dx2 = 1.122954276 * ca.exp(-(x1 + 110) / 24) * ca.sqrt(sqrt_arg) * (alpha + 1.802274) - 0.02069 * sqrt_arg
-        x_dot = ca.vertcat(dx1, dx2)
-
-        model = AcadosModel()
-        model.f_expl_expr = x_dot
-        model.f_impl_expr = fx - x_dot
-        model.x_dot = fx
-        model.x = x
-        model.u = u
-        model.p = []
-        model.name = "winged_cone"
-
-        return model
-
-
-def linearize_at_origin(acados_model):
+def linearize_at_origin(metadata):
     """
-    计算动力学模型在零点（x=0, u=0）的线性化矩阵A和B
-    :param model: AcadosModel对象
+    计算动力学模型在零点（x=0, u=0）的线性化矩阵A和B (使用 SymPy 计算)
+    :param metadata: 环境参数字典
     :return: 数值矩阵A, B
     """
-    model = acados_model.model
-    # 提取符号变量和表达式
-    x = model.x
-    u = model.u
-    f_expl = model.f_expl_expr  # 显式动力学: dx/dt = f_expl(x, u)
+    x1, x2, alpha = sp.symbols('x1 x2 alpha')
+    x = sp.Matrix([x1, x2])
+    u = sp.Matrix([alpha])
 
-    # 计算雅可比矩阵 (符号形式)
-    A_sym = ca.jacobian(f_expl, x)  # A = df/dx
-    B_sym = ca.jacobian(f_expl, u)  # B = df/du
+    sqrt_arg = 1.0 - (x2 / 15.06) ** 2
+    dx1 = x2
+    dx2 = 1.122954276 * sp.exp(-(x1 + 110.0) / 24.0) * sp.sqrt(sqrt_arg) * (alpha + 1.802274) - 0.02069 * sqrt_arg
+    f = sp.Matrix([dx1, dx2])
 
-    # 创建函数用于数值计算
-    A_func = ca.Function('A_func', [x, u], [A_sym])
-    B_func = ca.Function('B_func', [x, u], [B_sym])
+    A_sym = f.jacobian(x)
+    B_sym = f.jacobian(u)
 
-    # 在零点求值 (x=0, u=0)
-    x0 = np.zeros(model.x.size()[0])
-    u0 = np.array([0])
-    A0 = A_func(x0, u0).full()  # 转换为NumPy数组
-    B0 = B_func(x0, u0).full()
+    subs_dict = {x1: 0.0, x2: 0.0, alpha: 0.0}
+    A0 = np.array(A_sym.subs(subs_dict), dtype=np.float64)
+    B0 = np.array(B_sym.subs(subs_dict), dtype=np.float64)
 
     return A0, B0

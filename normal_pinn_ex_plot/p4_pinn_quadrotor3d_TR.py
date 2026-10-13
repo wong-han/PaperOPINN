@@ -123,7 +123,7 @@ def get_pfpu(X):
 class XTFC_PINN(nn.Module):
     def __init__(self, env, hidden_dim=400):
         super().__init__()
-        self.env = env
+        self.env = env.unwrapped if hasattr(env, 'unwrapped') else env
         self.state_dim = env.observation_space.shape[0]
         self.hidden_dim = hidden_dim
 

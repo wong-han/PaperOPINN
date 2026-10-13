@@ -1,0 +1,89 @@
+{
+  "configuration": {
+    "experiment": "constrained_siren",
+    "source_file": "/media/wonham/3A30AC0530ABC66B/Users/Lenovo/BUAA/research/存档/已发表/20250818-PMPInformedOC/Paper/npj Robotics/第2轮修改/PaperOPINN/sup_learn_ex_plot/p4_siren_quadrotor3d_TR_constrained_parallel.py",
+    "source_sha256": "d1a6f4874c78c87d2b93499350544f49f6f8c3245527103bca1ea05ba8f960b0",
+    "training_helper_sha256": "ec31576e0cc24b777308f5f6c9f422b716b32e5098a2854188c204cc304200b9",
+    "siren_sha256": "1778c3dc8f8f7bc6b9da5ea449bd95be8ffe5595d67737d343e0009da6c3e776",
+    "dataset_state_file": "/media/wonham/3A30AC0530ABC66B/Users/Lenovo/BUAA/research/存档/已发表/20250818-PMPInformedOC/Paper/npj Robotics/第2轮修改/PaperOPINN/sup_learn_ex_plot/data/X_trajs_constrained.npy",
+    "dataset_action_file": "/media/wonham/3A30AC0530ABC66B/Users/Lenovo/BUAA/research/存档/已发表/20250818-PMPInformedOC/Paper/npj Robotics/第2轮修改/PaperOPINN/sup_learn_ex_plot/data/U_trajs_constrained.npy",
+    "dataset_state_sha256": "34c733dd0e71bb9513a03fef6a0d30ae1e9c0c2a082eac0887031b6956e3ec3a",
+    "dataset_action_sha256": "16aee8168d4137446e0dbe3cec46c2fcbb175b4e83e495a0ed3d07bf6b674854",
+    "architecture": "SPNet(\n  (net): SIREN(\n    (net): Sequential(\n      (0): SineLayer(\n        (linear): Linear(in_features=9, out_features=64, bias=True)\n      )\n      (1): SineLayer(\n        (linear): Linear(in_features=64, out_features=64, bias=True)\n      )\n      (2): SineLayer(\n        (linear): Linear(in_features=64, out_features=64, bias=True)\n      )\n      (3): Linear(in_features=64, out_features=4, bias=True)\n    )\n  )\n)",
+    "parameters": 9220,
+    "environment": "environment:quadrotor3d_TR_constrained",
+    "device": "cuda",
+    "learning_rate": 0.0001,
+    "optimizer": "Adam",
+    "batch_size": 2048,
+    "maximum_steps": 100000,
+    "evaluation_interval": 100,
+    "target_training_mse": 0.0001,
+    "required_target_checks": 5,
+    "metric": "full_training_mse",
+    "dataset_split": "none",
+    "training_time_excludes_full_dataset_mse": true
+  },
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "training_seconds_mean": 11.710620466999535,
+  "training_seconds_sd": 0.7880188615917744,
+  "sd_convention": "population standard deviation (ddof=0)",
+  "runs": [
+    {
+      "seed": 0,
+      "steps": 13100,
+      "training_seconds": 12.654395854998711,
+      "training_wall_seconds": 13.2403739209999,
+      "full_dataset_mse_evaluation_seconds": 0.5896645210013958,
+      "stop_reason": "training_loss_target_sustained",
+      "target_reached": true,
+      "selected_model_training_mse": 7.037962374713067e-05
+    },
+    {
+      "seed": 1,
+      "steps": 11000,
+      "training_seconds": 10.862848066997685,
+      "training_wall_seconds": 11.321432988000197,
+      "full_dataset_mse_evaluation_seconds": 0.4622250530023848,
+      "stop_reason": "training_loss_target_sustained",
+      "target_reached": true,
+      "selected_model_training_mse": 9.660501972281247e-05
+    },
+    {
+      "seed": 2,
+      "steps": 11100,
+      "training_seconds": 10.686783890997958,
+      "training_wall_seconds": 11.153607506999833,
+      "full_dataset_mse_evaluation_seconds": 0.47034226600180773,
+      "stop_reason": "training_loss_target_sustained",
+      "target_reached": true,
+      "selected_model_training_mse": 8.850985531293733e-05
+    },
+    {
+      "seed": 3,
+      "steps": 12500,
+      "training_seconds": 12.08299577300022,
+      "training_wall_seconds": 12.635845616000097,
+      "full_dataset_mse_evaluation_seconds": 0.5565159420002601,
+      "stop_reason": "training_loss_target_sustained",
+      "target_reached": true,
+      "selected_model_training_mse": 8.253763077217291e-05
+    },
+    {
+      "seed": 4,
+      "steps": 12800,
+      "training_seconds": 12.2660787490031,
+      "training_wall_seconds": 12.816411968000011,
+      "full_dataset_mse_evaluation_seconds": 0.5538886829972398,
+      "stop_reason": "training_loss_target_sustained",
+      "target_reached": true,
+      "selected_model_training_mse": 7.695049733651388e-05
+    }
+  ]
+}

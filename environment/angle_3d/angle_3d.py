@@ -3,8 +3,6 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import torch
-import casadi as ca
-from acados_template import AcadosModel, AcadosOcp
 
 
 class Angle3D(gym.Env):
@@ -18,7 +16,6 @@ class Angle3D(gym.Env):
         super().__init__()
         
         # 模型设置
-        self.acados_model = NonmialAcadosModel(self.metadata)
         self.system_torch_dynamics = SystemTorchDynamics(self.metadata)
         self.observation_space = spaces.Box(low=-1.5, high=1.5, shape=(self.metadata['nx'],), dtype=np.float64)
         self.action_space = spaces.Box(low=-5.0, high=5.0, shape=(self.metadata['nu'],), dtype=np.float64)
@@ -211,44 +208,3 @@ class SystemTorchDynamics(torch.nn.Module):
         dtheta = cos_phi * q - sin_phi * r
         dpsi = (sin_phi / cos_theta) * q + (cos_phi / cos_theta) * r
         return torch.stack([dphi, dtheta, dpsi], dim=1)
-        
-class NonmialAcadosModel():
-    def __init__(self, metadata):
-        self.metadata = metadata
-        self.model = self.export_acados_model()
-
-    def export_acados_model(self):
-        nx = self.metadata['nx']
-        nu = self.metadata['nu']
-
-        fx = ca.SX.sym('x_dot', nx)
-        x = ca.SX.sym('x', nx)
-        u = ca.SX.sym('u', nu)
-        
-        # x = [phi, theta, psi], u = [p, q, r]
-        phi = x[0]
-        theta = x[1]
-        # psi = x[2]
-        p = u[0]
-        q = u[1]
-        r = u[2]
-        cos_theta = ca.cos(theta)
-        # 为了数值稳定性，避免直接除以cos_theta==0，可在外部设置约束；此处直接使用表达式
-        tan_theta = ca.tan(theta)
-        sin_phi = ca.sin(phi)
-        cos_phi = ca.cos(phi)
-        dphi = p + tan_theta * sin_phi * q + tan_theta * cos_phi * r
-        dtheta = cos_phi * q - sin_phi * r
-        dpsi = (sin_phi / cos_theta) * q + (cos_phi / cos_theta) * r
-        x_dot = ca.vertcat(dphi, dtheta, dpsi)
-
-        model = AcadosModel()
-        model.f_expl_expr = x_dot
-        model.f_impl_expr = fx - x_dot
-        model.x_dot = fx
-        model.x = x
-        model.u = u
-        model.p = []
-        model.name = "angle_3d"
-
-        return model

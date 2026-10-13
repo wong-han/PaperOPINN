@@ -42,7 +42,7 @@ class Args:
     # 总训练次数
     time_steps = 20000
     # 训练批次
-    batch_size = 1280
+    batch_size = 2048
     # 是否使用GPU
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # 文件名前缀
@@ -72,7 +72,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 class SPNet(nn.Module):
     def __init__(self, env):
-        self.env = env
+        self.env = env.unwrapped if hasattr(env, 'unwrapped') else env
         super().__init__()
         # 仅学习从状态 x 到控制量 u 的映射
         self.net = nn.Sequential(
@@ -101,18 +101,9 @@ def train_sp():
     # print(f"Training started at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
 
     for step in range(Args.time_steps):
-        # if time.time() - start_time > 30:
-        #     print(f"Time limit of 30s reached at step {step}. Stopping training.")
-        #     model_dir = "model"
-        #     os.makedirs(model_dir, exist_ok=True)
-        #     model_path = os.path.join(model_dir, "sp_linear2d.pth")
-        #     torch.save(model.state_dict(), model_path)
-        #     print(f"SP model saved to {model_path}")
-        #     break
-
         # 采样数据
-        low = -3.0
-        high = 3.0
+        low = -4.0
+        high = 4.0
         x_batch = np.random.uniform(low, high, (Args.batch_size, env.observation_space.shape[0]))
         X = torch.from_numpy(x_batch).float().to(Args.device)
 
@@ -426,6 +417,6 @@ def simulate_once():
 if __name__ == "__main__":
     args = Args()
     # 训练模型请取消注释下面一行
-    # train_sp()
+    train_sp()
     plot_value()
     # simulate_once()

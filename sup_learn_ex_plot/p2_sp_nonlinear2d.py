@@ -14,7 +14,7 @@ import casadi as ca
 
 # ================== 图像设置 =======================
 mpl.rcParams['font.family'] = 'Times New Roman'
-mpl.rcParams['text.usetex'] = True
+mpl.rcParams['text.usetex'] = False
 mpl.rcParams['axes.unicode_minus'] = False
 mpl.rcParams['xtick.direction'] = 'in'
 mpl.rcParams['ytick.direction'] = 'in'
@@ -34,6 +34,8 @@ mpl.rcParams['grid.color'] = 'gray'
 class Args:
     env_id = "environment:nonlinear2d-v0"
     learning_rate = 1e-3
+    time_steps = 20000
+    batch_size = 2048
     device = "cuda" if torch.cuda.is_available() else "cpu"
     filename_prefix = "sp_nonlinear2d_"
 
@@ -52,7 +54,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 class SPNet(nn.Module):
     def __init__(self, env):
-        self.env = env
+        self.env = env.unwrapped if hasattr(env, 'unwrapped') else env
         super().__init__()
         self.net = nn.Sequential(
             layer_init(nn.Linear(2, 64)),
@@ -65,96 +67,40 @@ class SPNet(nn.Module):
     def forward(self, x):
         return self.net(x)
 
-def setup_casadi_mpc():
-    opti = ca.Opti()
-    N = 30
-    dt = 0.1
-    x = opti.variable(2, N+1)
-    u = opti.variable(1, N)
-    x0 = opti.parameter(2, 1)
-
-    opti.subject_to(x[:, 0] == x0)
-    cost = 0
-    for k in range(N):
-        x1 = x[0, k]
-        x2 = x[1, k]
-        uk = u[0, k]
-        c = ca.cos(2*x1) + 2
-        dx1 = -x1 + x2
-        dx2 = -0.5*x1 - 0.5*x2*(1 - c**2) + c*uk
-        
-        opti.subject_to(x[0, k+1] == x1 + dx1*dt)
-        opti.subject_to(x[1, k+1] == x2 + dx2*dt)
-        
-        cost += (x1**2 + x2**2 + uk**2) * dt
-    
-    cost += (x[0, N]**2 + x[1, N]**2)
-    opti.minimize(cost)
-    opts = {'ipopt.print_level': 0, 'print_time': 0, 'ipopt.sb': 'yes'}
-    opti.solver('ipopt', opts)
-    return opti, x0, u
-
 def train_sp():
     env = gym.make(Args.env_id)
     model = SPNet(env).to(Args.device)
     optimizer = optim.Adam(model.parameters(), lr=Args.learning_rate)
 
-    print("--- Phase 1: Data Generation using MPC ---")
-    start_time = time.time()
-    
-    opti, x0_param, u_var = setup_casadi_mpc()
-    
-    X_data = []
-    U_data = []
-    
-    while time.time() - start_time < 15:
-        x_sample = np.random.uniform(-4.0, 4.0, 2)
-        opti.set_value(x0_param, x_sample)
-        try:
-            sol = opti.solve()
-            u_opt = sol.value(u_var[0, 0])
-            X_data.append(x_sample)
-            U_data.append([u_opt])
-        except Exception:
-            pass 
+    print("--- Training Network using Theoretical Optimal Control ---")
 
-    X_data = np.array(X_data, dtype=np.float32)
-    U_data = np.array(U_data, dtype=np.float32)
-    print(f"Generated {len(X_data)} samples in 15 seconds.")
-    
-    if len(X_data) == 0:
-        print("No data generated. Exiting.")
-        return
+    for step in range(Args.time_steps):
+        # 采样数据
+        low = -4.0
+        high = 4.0
+        x_batch = np.random.uniform(low, high, (Args.batch_size, 2)).astype(np.float32)
+        X = torch.from_numpy(x_batch).to(Args.device)
 
-    X_tensor_all = torch.from_numpy(X_data).to(Args.device)
-    U_tensor_all = torch.from_numpy(U_data).to(Args.device)
+        # Theoretical optimal control: u* = -(cos(2*x1) + 2) * x2
+        x1 = X[:, 0:1]
+        x2 = X[:, 1:2]
+        u_star = -(torch.cos(2*x1) + 2) * x2
 
-    print("--- Phase 2: Training Network ---")
-    train_start = time.time()
-    batch_size = min(Args.batch_size if hasattr(Args, 'batch_size') else 128, len(X_data))
-    
-    step = 0
-    while time.time() - train_start < 15:
-        idx = np.random.choice(len(X_data), batch_size)
-        X_batch = X_tensor_all[idx]
-        U_batch = U_tensor_all[idx]
-        
-        u_pred = model(X_batch)
-        loss = torch.nn.functional.mse_loss(u_pred, U_batch)
+        u_pred = model(X)
+        loss = torch.nn.functional.mse_loss(u_pred, u_star)
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        
+
         if step % 100 == 0:
-            print(f"Step {step}, Loss: {loss.item():.6f}")
-        step += 1
+            print(f"Step {step+1}/{Args.time_steps}, Loss: {loss.item():.6f}")
 
     model_dir = "model"
     os.makedirs(model_dir, exist_ok=True)
     model_path = os.path.join(model_dir, "sp_nonlinear2d.pth")
     torch.save(model.state_dict(), model_path)
-    print(f"SP model saved to {model_path}. Total training steps: {step}")
+    print(f"SP model saved to {model_path}")
 
 
 def plot_value():
@@ -170,8 +116,8 @@ def plot_value():
         print(f"Model file {model_path} not found. Running with untrained model.")
     model.eval()
 
-    x1 = np.linspace(-2.7, 2.7, 50)
-    x2 = np.linspace(-2.7, 2.7, 50)
+    x1 = np.linspace(-3, 3, 50)
+    x2 = np.linspace(-3, 3, 50)
     X1, X2 = np.meshgrid(x1, x2)
     X_grid = np.stack([X1.ravel(), X2.ravel()], axis=1)
 
@@ -258,8 +204,8 @@ def plot_value():
     ax2.set_xlim([-3.5, 3.2])
     ax2.set_ylim([-3.5, 3.2])
     
-    x1_lin = np.linspace(-3.0, 3.0, 22)
-    x2_lin = np.linspace(-3.0, 3.0, 22)
+    x1_lin = np.linspace(-3, 3, 22)
+    x2_lin = np.linspace(-3, 3, 22)
     X1_grid, X2_grid = np.meshgrid(x1_lin, x2_lin)
     U = np.zeros_like(X1_grid)
     Vv = np.zeros_like(X2_grid)
@@ -289,31 +235,6 @@ def plot_value():
     os.makedirs("image", exist_ok=True)
     filename = "image/" + args.filename_prefix + "value_function.svg"
     plt.savefig(filename, dpi=600, bbox_inches='tight', pad_inches=0.5)
-
-    # 单独画对比曲面（图1第一个子图的单独版）
-    fig2_standalone = plt.figure(figsize=(6,5))
-    ax2_3d = fig2_standalone.add_subplot(111, projection='3d')
-    surf_fig2_1 = ax2_3d.plot_surface(
-        X1, X2, sp_values, cmap='Greens', alpha=1, linewidth=0, antialiased=True, rstride=1, cstride=1
-    )
-    surf_fig2_1_1 = ax2_3d.plot_surface(
-        X1, X2, V_dot_sp, cmap='Greens', alpha=1, linewidth=0, antialiased=True, rstride=1, cstride=1
-    )
-    surf_fig2_2 = ax2_3d.plot_surface(
-        X1, X2, opt_values, cmap='Oranges', alpha=0.4, linewidth=0, antialiased=True, rstride=1, cstride=1
-    )
-    surf_fig2_2_1 = ax2_3d.plot_surface(
-        X1, X2, V_dot_opt, cmap='Oranges', alpha=0.8, linewidth=0, antialiased=True, rstride=1, cstride=1
-    )
-    ax2_3d.set_xlabel(r'$x_1$', labelpad=10)
-    ax2_3d.set_ylabel(r'$x_2$', labelpad=10)
-    ax2_3d.set_zlabel(r'$V$ and $\dot V$', labelpad=10)
-    ax2_3d.view_init(elev=9, azim=-64, roll=0)
-    ax2_3d.set_xlim([-3, 3])
-    ax2_3d.set_ylim([-3, 3])
-    ax2_3d.set_zlim([-80, 20])
-    filename2 = "image/" + args.filename_prefix + "value_function_3d_standalone.svg"
-    plt.savefig(filename2, dpi=600, bbox_inches='tight', pad_inches=0.5)
 
     # 画V的等高线图
     fig3 = plt.figure(figsize=(6,5))
@@ -432,6 +353,6 @@ def simulate_once():
 
 
 if __name__ == "__main__":
-    # train_sp()
+    train_sp()
     plot_value()
-    # simulate_once()
+    simulate_once()

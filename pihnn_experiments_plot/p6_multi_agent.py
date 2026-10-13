@@ -139,7 +139,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 class OPINN(nn.Module):
     def __init__(self, env):
         super().__init__()
-        self.env = env
+        self.env = env.unwrapped if hasattr(env, 'unwrapped') else env
         self.state_dim = env.state_dim
         self.action_dim = env.action_dim
         

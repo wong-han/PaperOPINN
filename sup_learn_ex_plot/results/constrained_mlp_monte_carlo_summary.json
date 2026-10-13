@@ -1,0 +1,41 @@
+{
+  "experiment": "constrained_mlp",
+  "seed": 100,
+  "episodes": 50,
+  "horizon_steps": 800,
+  "success_position_l2_tolerance": 0.1,
+  "monte_carlo_seconds": 194.91309800000454,
+  "seconds_per_episode": 3.8982619600000907,
+  "training_seconds": 31.68956499999331,
+  "training_steps": 26000,
+  "training_stop_reason": "training_loss_target_sustained",
+  "controllers": {
+    "lqr": {
+      "return_mean": -14.79687094861329,
+      "return_std": 10.191733068418692,
+      "final_position_error_mean": 0.0001269854864926817,
+      "final_position_error_std": 0.00018978805773808605,
+      "minimum_y_mean": -0.1712598007001601,
+      "constraint_violation_rate": 1.0,
+      "success_rate": 1.0
+    },
+    "mlp": {
+      "return_mean": -8.55572390892397,
+      "return_std": 5.57917719639274,
+      "final_position_error_mean": 0.005684545247055166,
+      "final_position_error_std": 0.0004305415552056886,
+      "minimum_y_mean": -0.025577124684743775,
+      "constraint_violation_rate": 1.0,
+      "success_rate": 1.0
+    },
+    "hnn": {
+      "return_mean": -10.97112960282857,
+      "return_std": 7.40043765247858,
+      "final_position_error_mean": 0.0013976358421905121,
+      "final_position_error_std": 0.0010731801441625222,
+      "minimum_y_mean": -0.09207433967366267,
+      "constraint_violation_rate": 1.0,
+      "success_rate": 1.0
+    }
+  }
+}

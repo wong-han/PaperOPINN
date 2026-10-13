@@ -1,0 +1,7 @@
+{
+  "return_mean_smoothing": "causal per-seed exponential moving average",
+  "alpha": 0.25,
+  "sd": "population SD across smoothed seed curves",
+  "raw_data_and_summary_unchanged": true,
+  "stop_points": "smoothed final return in return_mean; raw final return in return_individual"
+}

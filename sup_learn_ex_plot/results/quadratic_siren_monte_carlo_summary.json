@@ -1,0 +1,35 @@
+{
+  "experiment": "quadratic_siren",
+  "seed": 100,
+  "episodes": 50,
+  "horizon_steps": 800,
+  "success_position_l2_tolerance": 0.1,
+  "monte_carlo_seconds": 197.35564120000345,
+  "seconds_per_episode": 3.947112824000069,
+  "training_seconds": 18.175416400001268,
+  "training_steps": 12900,
+  "training_stop_reason": "training_loss_target_sustained",
+  "controllers": {
+    "lqr": {
+      "return_mean": -9.263679214605963,
+      "return_std": 5.475407779136995,
+      "final_position_error_mean": 0.00010551539943080992,
+      "final_position_error_std": 0.00014459003303751613,
+      "success_rate": 1.0
+    },
+    "siren": {
+      "return_mean": -7.26293563482027,
+      "return_std": 3.391691232231622,
+      "final_position_error_mean": 0.001971887765031334,
+      "final_position_error_std": 9.823864120806195e-05,
+      "success_rate": 1.0
+    },
+    "hnn": {
+      "return_mean": -7.587349692258212,
+      "return_std": 3.65265814190696,
+      "final_position_error_mean": 0.0014194784766666086,
+      "final_position_error_std": 0.0010441796689203112,
+      "success_rate": 1.0
+    }
+  }
+}

@@ -3,7 +3,7 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import torch
-import casadi as ca
+import sympy as sp
 import scipy
 
 
@@ -80,13 +80,16 @@ class Quadrotor3D_TR(gym.Env):
         info['data'] = deepcopy(self.data)
         return info
 
-    def reset(self, seed=None, positive_y=False, options={}, theoretic_mode=False, rl_mode=False):
+    def reset(self, seed=None, positive_y=False, options=None, theoretic_mode=None, rl_mode=None):
         super().reset(seed=seed)
         np.random.seed(seed)
 
-        # 仿真设置
-        self.theoretic_mode = theoretic_mode
-        self.rl_mode = rl_mode
+        # Preserve the mode selected when the environment was constructed unless
+        # the caller explicitly requests a different mode for this and later episodes.
+        if theoretic_mode is not None:
+            self.theoretic_mode = theoretic_mode
+        if rl_mode is not None:
+            self.rl_mode = rl_mode
 
         # 初始状态
         if options is not None:
@@ -154,7 +157,8 @@ class Quadrotor3D_TR(gym.Env):
             crashed = False
         if self.t > self.T or crashed:
             truncated = True
-            truncated_reward = -300 * np.linalg.norm(self.state[0:3]) * self.rl_mode
+            # truncated_reward = -300 * np.linalg.norm(self.state[0:3]) * self.rl_mode
+            # reward += truncated_reward
         else:
             truncated = False
             
@@ -181,74 +185,60 @@ class Quadrotor3D_TR(gym.Env):
 
     def _linearize_at_origin(self):
         """
-        利用CasADi进行符号表达式计算，并在平衡点处求取雅可比矩阵线性化
+        利用SymPy进行符号表达式计算，并在平衡点处求取雅可比矩阵线性化
         """
-        nx = self.metadata['nx']
-        nu = self.metadata['nu']
         m = self.metadata['m']
         g = self.metadata['g']
 
-        x = ca.SX.sym('x', nx)
-        u = ca.SX.sym('u', nu)
-
-        # 状态变量
-        px = x[0]
-        py = x[1]
-        pz = x[2]
-        vx = x[3]
-        vy = x[4]
-        vz = x[5]
-        phi = x[6]
-        theta = x[7]
-        psi = x[8]
-
-        # 动作
-        T = u[0]
-        p = u[1]
-        q = u[2]
-        r = u[3]
-
-        cphi = ca.cos(phi)
-        sphi = ca.sin(phi)
-        cth = ca.cos(theta)
-        sth = ca.sin(theta)
-        cpsi = ca.cos(psi)
-        spsi = ca.sin(psi)
-        R = ca.vertcat(
-            ca.horzcat(cth * cpsi, sphi * sth * cpsi - cphi * spsi, cphi * sth * cpsi + sphi * spsi),
-            ca.horzcat(cth * spsi, sphi * sth * spsi + cphi * cpsi, cphi * sth * spsi - sphi * cpsi),
-            ca.horzcat(-sth,       sphi * cth,                      cphi * cth)
+        px, py, pz, vx, vy, vz, phi, theta, psi = sp.symbols(
+            'px py pz vx vy vz phi theta psi'
         )
+        T, p, q, r = sp.symbols('T p q r')
 
-        # 位置微分
-        dpos = ca.vertcat(vx, vy, vz)
-        # 速度微分
-        dv = (1.0 / m) * (R @ ca.vertcat(0, 0, T)) - ca.vertcat(0, 0, g)
+        x = sp.Matrix([px, py, pz, vx, vy, vz, phi, theta, psi])
+        u = sp.Matrix([T, p, q, r])
 
-        # 欧拉角微分
-        tan_theta = ca.tan(theta)
-        sec_theta = 1.0 / ca.cos(theta)
-        euler_dot = ca.vertcat(
+        cphi = sp.cos(phi)
+        sphi = sp.sin(phi)
+        cth = sp.cos(theta)
+        sth = sp.sin(theta)
+        cpsi = sp.cos(psi)
+        spsi = sp.sin(psi)
+        R = sp.Matrix([
+            [cth * cpsi, sphi * sth * cpsi - cphi * spsi, cphi * sth * cpsi + sphi * spsi],
+            [cth * spsi, sphi * sth * spsi + cphi * cpsi, cphi * sth * spsi - sphi * cpsi],
+            [-sth,       sphi * cth,                      cphi * cth]
+        ])
+
+        dpos = sp.Matrix([vx, vy, vz])
+        dv = (1.0 / m) * (R * sp.Matrix([0, 0, T])) - sp.Matrix([0, 0, g])
+
+        tan_theta = sp.tan(theta)
+        sec_theta = 1.0 / sp.cos(theta)
+        euler_dot = sp.Matrix([
             p + sphi * tan_theta * q + cphi * tan_theta * r,
             cphi * q - sphi * r,
             sphi * sec_theta * q + cphi * sec_theta * r
-        )
+        ])
 
-        x_dot = ca.vertcat(dpos, dv, euler_dot)
+        f = sp.Matrix([
+            dpos[0], dpos[1], dpos[2],
+            dv[0], dv[1], dv[2],
+            euler_dot[0], euler_dot[1], euler_dot[2]
+        ])
 
-        # 计算雅可比矩阵
-        A_sym = ca.jacobian(x_dot, x)
-        B_sym = ca.jacobian(x_dot, u)
+        A_sym = f.jacobian(x)
+        B_sym = f.jacobian(u)
 
-        # 创建函数用于求值
-        A_func = ca.Function('A_func', [x, u], [A_sym])
-        B_func = ca.Function('B_func', [x, u], [B_sym])
+        subs_dict = {
+            px: 0.0, py: 0.0, pz: 0.0,
+            vx: 0.0, vy: 0.0, vz: 0.0,
+            phi: 0.0, theta: 0.0, psi: 0.0,
+            T: m * g, p: 0.0, q: 0.0, r: 0.0
+        }
 
-        # 在平衡点求值
-        x0 = np.zeros(nx)
-        u0 = np.array([m * g, 0.0, 0.0, 0.0])
-        A = A_func(x0, u0).full()
-        B = B_func(x0, u0).full()
+        A = np.array(A_sym.subs(subs_dict), dtype=np.float64)
+        B = np.array(B_sym.subs(subs_dict), dtype=np.float64)
 
         return A, B
 
@@ -391,6 +381,5 @@ class SystemTorchDynamics(torch.nn.Module):
             dpos, dv, euler_dot
         ], dim=1)
         return dxdt
-
 
 

@@ -1,0 +1,17 @@
+{
+  "problem": "quadratic",
+  "seed": 42,
+  "target_trajectories": 200,
+  "valid_trajectories": 200,
+  "generation_attempts": 202,
+  "samples": 66637,
+  "workers": 24,
+  "max_trajectory_seconds": 5.0,
+  "terminal_position_velocity_l2_tolerance": 0.01,
+  "trajectories_reaching_terminal_tolerance": 200,
+  "terminal_error_mean": 0.009860911393024467,
+  "terminal_error_std": 0.00010833038049380193,
+  "data_generation_seconds": 150.92849610700023,
+  "state_file": "/media/wonham/3A30AC0530ABC66B/Users/Lenovo/BUAA/research/存档/已发表/20250818-PMPInformedOC/Paper/npj Robotics/第2轮修改/PaperOPINN/sup_learn_ex_plot/data/X_trajs.npy",
+  "action_file": "/media/wonham/3A30AC0530ABC66B/Users/Lenovo/BUAA/research/存档/已发表/20250818-PMPInformedOC/Paper/npj Robotics/第2轮修改/PaperOPINN/sup_learn_ex_plot/data/U_trajs.npy"
+}

@@ -45,13 +45,30 @@ mpl.rcParams['grid.color'] = 'gray'
 
 # =================== 参数设置 ======================
 class Args:
+    # 随机种子
+    seed = 42
     env_id = "environment:angle3d-v0"
-    learning_rate = 1e-2  # X-TFC 使用 L-BFGS 或快速 Adam，学习率可放大
+    learning_rate = 1  # X-TFC 使用 L-BFGS 或快速 Adam，学习率可放大
     time_steps = 10000     # ELM 收敛极大加速，无需 10000 步
-    batch_size = 1280     # 配点数量 (Collocation points)
+    batch_size = 512     # 配点数量 (Collocation points)
     hidden_dim = 400      # 论文推荐 X-TFC 隐藏节点数 100~800
     device = "cuda" if torch.cuda.is_available() else "cpu"
     filename_prefix = "xtfc_angle3d_"
+
+args = Args()
+
+
+def set_seed(seed=42):
+    import random
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
 
 
 # 动力学相关
@@ -104,7 +121,7 @@ def get_pfpu(X):
 class XTFC_PINN(nn.Module):
     def __init__(self, env, hidden_dim=400):
         super().__init__()
-        self.env = env
+        self.env = env.unwrapped if hasattr(env, 'unwrapped') else env
         self.state_dim = env.observation_space.shape[0]
         self.hidden_dim = hidden_dim
 
@@ -216,13 +233,17 @@ def get_hjb_residual_loss(model, X):
     return loss
 
 
-def train_xtfc():
+def train_xtfc(seed=None):
     args = Args()
-    env = gym.make(args.env_id)
+    if seed is None:
+        seed = getattr(args, 'seed', 42)
+    set_seed(seed)
+
+    env = gym.make(args.env_id).unwrapped
     xtfc = XTFC_PINN(env, hidden_dim=args.hidden_dim).to(args.device)
 
     # 采样均匀分布的训练配点 (Collocation Points)
-    low, high = -1.0, 1.0
+    low, high = -1.1, 1.1
     x_batch = np.random.uniform(low, high, (args.batch_size, env.observation_space.shape[0]))
     X_train = torch.from_numpy(x_batch).float().to(args.device)
 
@@ -231,16 +252,11 @@ def train_xtfc():
 
     # 2. 使用 L-BFGS (拟牛顿迭代最小二乘法) 或 Adam 优化唯一变量 \beta
     # 论文指出 X-TFC 的参数呈线性化特征，迭代收敛极快
-    optimizer = optim.LBFGS([xtfc.beta], lr=1.0, max_iter=20, history_size=50, line_search_fn="strong_wolfe")
+    optimizer = optim.LBFGS([xtfc.beta], lr=args.learning_rate, max_iter=20, history_size=50, line_search_fn="strong_wolfe")
     
-    print("Starting X-TFC Iterative Least-Squares Training...")
     start_time = time.time()
     
-    for step in range(args.time_steps // 20):  # L-BFGS 每步包含多次内部迭代
-        if time.time() - start_time > 30:
-            print(f"Time limit of 30s reached at step {step}. Stopping training.")
-            break
-            
+    for step in range(args.time_steps):
         def closure():
             optimizer.zero_grad()
             # 为防止过拟合固定网格，每步微调重采样一部分点
@@ -252,8 +268,11 @@ def train_xtfc():
 
         loss = optimizer.step(closure)
         
-        if step % 5 == 0:
-            print(f"Iter {step*20}/{args.time_steps}, HJB Residual MSE Loss: {loss.item():.2e}")
+        if (step + 1) % 100 == 0 or step == 0:
+            print(f"Step {step+1}/{args.time_steps}, HJB Residual MSE Loss: {loss.item():.6e}")
+
+    end_time = time.time()
+    print(f"Training completed. Total training time: {end_time - start_time:.2f} seconds.")
 
     # 保存 X-TFC 模型参数
     model_dir = "model"
@@ -270,7 +289,7 @@ def plot_value():
     model_dir = "model"
     model_path = os.path.join(model_dir, "xtfc_angle3d.pth")
     args = Args()
-    env = gym.make(args.env_id)
+    env = gym.make(args.env_id).unwrapped
     xtfc = XTFC_PINN(env, hidden_dim=args.hidden_dim)
     xtfc.load_state_dict(torch.load(model_path, map_location="cpu"))
     xtfc.eval()
@@ -316,7 +335,7 @@ def plot_lambda():
     model_dir = "model"
     model_path = os.path.join(model_dir, "xtfc_angle3d.pth")
     args = Args()
-    env = gym.make(args.env_id)
+    env = gym.make(args.env_id).unwrapped
     xtfc = XTFC_PINN(env, hidden_dim=args.hidden_dim)
     xtfc.load_state_dict(torch.load(model_path, map_location="cpu"))
     xtfc.eval()
@@ -366,7 +385,7 @@ def plot_lambda():
 def monte_carlo_simulation():
     args = Args()
     device = args.device
-    env = gym.make(args.env_id)
+    env = gym.make(args.env_id).unwrapped
 
     xtfc = XTFC_PINN(env, hidden_dim=args.hidden_dim).to(device)
     xtfc_path = os.path.join("model", "xtfc_angle3d.pth")
@@ -409,9 +428,9 @@ def monte_carlo_simulation():
     print("Running Monte Carlo Simulations over 50 Episodes...")
     for ep in range(num_episodes):
         seed = int(np.random.randint(0, 2**31 - 1))
-        env_x = gym.make(args.env_id)
-        env_s = gym.make(args.env_id)
-        env_l = gym.make(args.env_id)
+        env_x = gym.make(args.env_id).unwrapped
+        env_s = gym.make(args.env_id).unwrapped
+        env_l = gym.make(args.env_id).unwrapped
         
         obs_x, _ = env_x.reset(seed=seed, theoretic_mode=True)
         obs_s, _ = env_s.reset(seed=seed, theoretic_mode=True)

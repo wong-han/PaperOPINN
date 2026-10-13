@@ -3,8 +3,6 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import torch
-import casadi as ca
-from acados_template import AcadosModel, AcadosOcp
 
 
 class Quadrotor2D(gym.Env):
@@ -22,7 +20,6 @@ class Quadrotor2D(gym.Env):
         super().__init__()
         
         # 模型设置
-        self.acados_model = NonmialAcadosModel(self.metadata)
         self.system_torch_dynamics = SystemTorchDynamics(self.metadata)
         state_low = np.array([-2, -2, -1.5, -10, -10, -10])
         state_high = np.array([2, 2, 1.5, 10, 10, 10])
@@ -246,55 +243,3 @@ class SystemTorchDynamics(torch.nn.Module):
         dx5 = ((u1 + u2) * torch.cos(x3) - m * g) / m
         dx6 = r * (u1 - u2) / I
         return torch.stack([dx1, dx2, dx3, dx4, dx5, dx6], dim=1)
-        
-class NonmialAcadosModel():
-    def __init__(self, metadata):
-        self.metadata = metadata
-        self.model = self.export_acados_model()
-
-    def export_acados_model(self):
-        nx = self.metadata['nx']
-        nu = self.metadata['nu']
-        m = self.metadata['m']
-        g = self.metadata['g']
-        r = self.metadata['r']
-        I = self.metadata['I']
-
-        fx = ca.SX.sym('x_dot', nx)
-        x = ca.SX.sym('x', nx)
-        u = ca.SX.sym('u', nu)
-        
-        # 非线性动力学（Quadrotor 2D）
-        x1 = x[0]
-        x2 = x[1]
-        x3 = x[2]
-        x4 = x[3]
-        x5 = x[4]
-        x6 = x[5]
-
-        u1 = u[0]
-        u2 = u[1]
-
-        dx1 = x4
-        dx2 = x5
-        dx3 = x6
-        dx4 = - (u1 + u2) * ca.sin(x3) / m
-        dx5 = ((u1 + u2) * ca.cos(x3) - m * g) / m
-        dx6 = r * (u1 - u2) / I
-        x_dot = ca.vertcat(dx1, dx2, dx3, dx4, dx5, dx6)
-
-        model = AcadosModel()
-        model.f_expl_expr = x_dot
-        model.f_impl_expr = fx - x_dot
-        model.x_dot = fx
-        model.x = x
-        model.u = u
-        model.p = []
-        model.name = "quadrotor2d"
-
-        return model
-
-
-
-
-

@@ -1,0 +1,133 @@
+{
+  "configuration": {
+    "source_file": "/media/wonham/3A30AC0530ABC66B/Users/Lenovo/BUAA/research/存档/已发表/20250818-PMPInformedOC/Paper/npj Robotics/第2轮修改/PaperOPINN/reinforce_learn_ex_plot/p4_rl_quadrotor3d_TR_constrained.py",
+    "settings": {
+      "env_id": "environment:quadrotor3d_TR_constrained",
+      "learning_rate": 0.0003,
+      "time_steps": 2000000,
+      "num_envs": 8,
+      "num_steps": 2000,
+      "minibatch_size": 2048,
+      "gradient_updates_per_rollout": 256,
+      "return_window_episodes": 50,
+      "clip_param": 0.2,
+      "gamma": 0.99,
+      "gae_lambda": 0.95,
+      "device": "cuda",
+      "filename_prefix": "rl_quadrotor3d_constrained_"
+    },
+    "source_hashes": {
+      "reinforce_learn_ex_plot/p4_rl_quadrotor3d_TR_constrained.py": "94263ec2924c6cd5d372dd89302a6cf484d44db4b02d7544e1f71e51daa88890",
+      "reinforce_learn_ex_plot/parallel_ppo_training_common.py": "8e92aef66932b2aa5840c0c72a5fd15dcd08947403091dea9430e5bff59cb911",
+      "environment/__init__.py": "1ddb1d24bc1a0cfb89e6d2236d0caf56f902e1139a0bf0bf2e798f9e58f6c10c",
+      "environment/quadrotor3d_TR_constrained/__init__.py": "06c303faba104c893df3cb740d7b9ba104b6a09c86042453824a180803d26a2c",
+      "environment/quadrotor3d_TR_constrained/quadrotor3d_TR.py": "c178d71fb52095d5c573cb2e8629f865251cd7382220204dae999c3db04a747e"
+    },
+    "reward_mode": {
+      "theoretic_mode": false,
+      "rl_mode": true
+    },
+    "curve_metric": "rolling mean of completed training episode returns (shaped reward)",
+    "seed_control": "Python, NumPy, PyTorch; vector environments reset with seed + env index",
+    "timing_scope": "Original helper: training loop through environment close; excludes initialization, model saving and plots"
+  },
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "timing": {
+    "data_collection_seconds": {
+      "mean": 1050.8085156436023,
+      "sd": 53.70852395469238
+    },
+    "training_seconds": {
+      "mean": 80.10485253359802,
+      "sd": 1.7505814824520098
+    },
+    "total_seconds": {
+      "mean": 1130.9133681772005,
+      "sd": 52.363283715184544
+    }
+  },
+  "sd_convention": "population standard deviation (ddof=0)",
+  "runs": [
+    {
+      "seed": 0,
+      "requested_total_timesteps": 2000000,
+      "actual_total_timesteps": 2000000,
+      "data_collection_seconds": 1151.036870705002,
+      "training_seconds": 77.90094153699829,
+      "total_seconds": 1228.9378122420003,
+      "final_stability_summary": {
+        "rollouts_used": 10,
+        "rolling_return_mean": 42.94301388856047,
+        "rolling_return_std": 0.8531822098340457,
+        "return_slope_per_100k_interactions": -0.4840787230668531
+      },
+      "model_file": "/media/wonham/3A30AC0530ABC66B/Users/Lenovo/BUAA/research/存档/已发表/20250818-PMPInformedOC/Paper/npj Robotics/第2轮修改/PaperOPINN/0_seed_test/results/p4_quadrotor3d_constrained_rl_test/seed_0/model/model.pth"
+    },
+    {
+      "seed": 1,
+      "requested_total_timesteps": 2000000,
+      "actual_total_timesteps": 2000000,
+      "data_collection_seconds": 1053.2477662219917,
+      "training_seconds": 78.99797551000847,
+      "total_seconds": 1132.2457417320002,
+      "final_stability_summary": {
+        "rollouts_used": 10,
+        "rolling_return_mean": 42.24482907059609,
+        "rolling_return_std": 2.5571996698726784,
+        "return_slope_per_100k_interactions": 3.215821642679387
+      },
+      "model_file": "/media/wonham/3A30AC0530ABC66B/Users/Lenovo/BUAA/research/存档/已发表/20250818-PMPInformedOC/Paper/npj Robotics/第2轮修改/PaperOPINN/0_seed_test/results/p4_quadrotor3d_constrained_rl_test/seed_1/model/model.pth"
+    },
+    {
+      "seed": 2,
+      "requested_total_timesteps": 2000000,
+      "actual_total_timesteps": 2000000,
+      "data_collection_seconds": 1036.7560144299841,
+      "training_seconds": 79.61050637201515,
+      "total_seconds": 1116.3665208019993,
+      "final_stability_summary": {
+        "rollouts_used": 10,
+        "rolling_return_mean": 44.73636334638736,
+        "rolling_return_std": 1.2030835504459452,
+        "return_slope_per_100k_interactions": -0.5029321257349184
+      },
+      "model_file": "/media/wonham/3A30AC0530ABC66B/Users/Lenovo/BUAA/research/存档/已发表/20250818-PMPInformedOC/Paper/npj Robotics/第2轮修改/PaperOPINN/0_seed_test/results/p4_quadrotor3d_constrained_rl_test/seed_2/model/model.pth"
+    },
+    {
+      "seed": 3,
+      "requested_total_timesteps": 2000000,
+      "actual_total_timesteps": 2000000,
+      "data_collection_seconds": 995.3752394389885,
+      "training_seconds": 81.07030276701153,
+      "total_seconds": 1076.445542206,
+      "final_stability_summary": {
+        "rollouts_used": 10,
+        "rolling_return_mean": 40.47800894347954,
+        "rolling_return_std": 2.8299492573082543,
+        "return_slope_per_100k_interactions": 0.2239098002289228
+      },
+      "model_file": "/media/wonham/3A30AC0530ABC66B/Users/Lenovo/BUAA/research/存档/已发表/20250818-PMPInformedOC/Paper/npj Robotics/第2轮修改/PaperOPINN/0_seed_test/results/p4_quadrotor3d_constrained_rl_test/seed_3/model/model.pth"
+    },
+    {
+      "seed": 4,
+      "requested_total_timesteps": 2000000,
+      "actual_total_timesteps": 2000000,
+      "data_collection_seconds": 1017.6266874220455,
+      "training_seconds": 82.94453648195667,
+      "total_seconds": 1100.5712239040022,
+      "final_stability_summary": {
+        "rollouts_used": 10,
+        "rolling_return_mean": 43.52441426666907,
+        "rolling_return_std": 1.4732629694480524,
+        "return_slope_per_100k_interactions": -0.16118119692307947
+      },
+      "model_file": "/media/wonham/3A30AC0530ABC66B/Users/Lenovo/BUAA/research/存档/已发表/20250818-PMPInformedOC/Paper/npj Robotics/第2轮修改/PaperOPINN/0_seed_test/results/p4_quadrotor3d_constrained_rl_test/seed_4/model/model.pth"
+    }
+  ]
+}

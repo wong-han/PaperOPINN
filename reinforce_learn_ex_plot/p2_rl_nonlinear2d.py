@@ -10,24 +10,32 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import gymnasium as gym
-from torch.utils.tensorboard import SummaryWriter
+from rl_training_recording import (
+    save_learning_curve,
+    save_training_record,
+    stability_summary,
+    synchronize_device,
+)
 
 def eval_policy(agent, env_id, num_episodes=5):
     eval_env = gym.make(env_id, theoretic_mode=True)
     total_return = 0.0
-    for _ in range(num_episodes):
-        obs, _ = eval_env.reset(rl_mode=True)
-        episode_return = 0.0
-        done = False
-        while not done:
-            with torch.no_grad():
-                obs_tensor = torch.Tensor(obs).unsqueeze(0).to(Args.device)
-                action = agent.actor_mean(obs_tensor)
-                action_np = action.cpu().numpy().flatten()
-            obs, reward, terminated, truncated, _ = eval_env.step(action_np)
-            episode_return += reward
-            done = terminated or truncated
-        total_return += episode_return
+    try:
+        for _ in range(num_episodes):
+            obs, _ = eval_env.reset(options={"rl_mode": True})
+            episode_return = 0.0
+            done = False
+            while not done:
+                with torch.no_grad():
+                    obs_tensor = torch.Tensor(obs).unsqueeze(0).to(Args.device)
+                    action = agent.actor_mean(obs_tensor)
+                    action_np = action.cpu().numpy().flatten()
+                obs, reward, terminated, truncated, _ = eval_env.step(action_np)
+                episode_return += reward
+                done = terminated or truncated
+            total_return += episode_return
+    finally:
+        eval_env.close()
     return total_return / num_episodes
     
 # ================== 图像设置 =======================
@@ -61,11 +69,15 @@ class Args:
     # 总训练交互步数 (PPO需要较多数据)
     time_steps = 1000000
     # 每次PPO更新的步数
-    num_steps = 2048
+    num_steps = 2000
     # 训练批次
     batch_size = 64
     # PPO的优化轮数
     ppo_epochs = 10
+    reward_mode = "theoretic"
+    seed = 0
+    entropy_coef = 0.0
+    reward_scale = 1.0
     # clip参数
     clip_param = 0.2
     # 折扣因子
@@ -76,6 +88,10 @@ class Args:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # 文件名前缀
     filename_prefix = "rl_nonlinear2d_"
+    return_window_episodes = 20
+    model_filename = "rl_nonlinear2d_v1_reproduction.pth"
+    result_filename = "rl_nonlinear2d_v1_reproduction_training.json"
+    curve_filename = "rl_nonlinear2d_v1_reproduction_learning_curve.png"
 
 
 # 动力学相关 (用于测试和画图时的积分推演)
@@ -140,13 +156,15 @@ class RLNet(nn.Module):
 # ================== PPO 训练逻辑 ==================
 def train_rl():
     env = gym.make(Args.env_id, theoretic_mode=True)
+    np.random.seed(Args.seed)
+    torch.manual_seed(Args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(Args.seed)
     state_dim = env.observation_space.shape[0]
     action_dim = 1  # 针对当前线性的2D环境，控制量为1维
     
     agent = RLNet(state_dim, action_dim).to(Args.device)
     optimizer = optim.Adam(agent.parameters(), lr=Args.learning_rate, eps=1e-5)
-    
-    writer = SummaryWriter(log_dir="log/ppo_nonlinear2d")
     
     # 初始化 rollout 缓冲区
     num_steps = Args.num_steps
@@ -160,9 +178,19 @@ def train_rl():
     global_step = 0
     num_updates = Args.time_steps // num_steps
     
-    next_obs, _ = env.reset(rl_mode=True)
+    next_obs, _ = env.reset(seed=Args.seed, options={"rl_mode": True})
     next_obs = torch.Tensor(next_obs).to(Args.device)
     next_done = torch.zeros(1).to(Args.device)
+
+    sampling_seconds = 0.0
+    running_episode_return = 0.0
+    completed_episode_returns = []
+    learning_curve_steps = []
+    rollout_mean_returns = []
+    rolling_mean_returns = []
+
+    synchronize_device(Args.device)
+    training_start = time.perf_counter()
 
     # start_time = time.time()
     # print(f"Training started at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
@@ -174,6 +202,9 @@ def train_rl():
         #     break
 
         # 采集数据
+        synchronize_device(Args.device)
+        sampling_start = time.perf_counter()
+        returns_completed_this_rollout = []
         for step in range(0, num_steps):
             global_step += 1
             obs[step] = next_obs
@@ -187,14 +218,37 @@ def train_rl():
             
             action_np = action.cpu().numpy().flatten()
             next_obs_np, reward, terminated, truncated, info = env.step(action_np)
+            unscaled_reward = float(np.asarray(reward).reshape(-1)[0])
+            optimization_reward = unscaled_reward * Args.reward_scale
+            running_episode_return += unscaled_reward
             
-            rewards[step] = torch.tensor(reward).to(Args.device).view(-1)
+            rewards[step] = torch.tensor(
+                optimization_reward, dtype=torch.float32, device=Args.device
+            ).view(-1)
             next_obs = torch.Tensor(next_obs_np).to(Args.device)
             next_done = torch.Tensor([terminated or truncated]).to(Args.device)
             
             if terminated or truncated:
-                next_obs_np, _ = env.reset()
+                completed_episode_returns.append(running_episode_return)
+                returns_completed_this_rollout.append(running_episode_return)
+                running_episode_return = 0.0
+                # Keep the same initial-state distribution after every episode.
+                next_obs_np, _ = env.reset(options={"rl_mode": True})
                 next_obs = torch.Tensor(next_obs_np).to(Args.device)
+
+        synchronize_device(Args.device)
+        sampling_seconds += time.perf_counter() - sampling_start
+        rollout_mean = (
+            float(np.mean(returns_completed_this_rollout))
+            if returns_completed_this_rollout else None
+        )
+        rolling_mean = (
+            float(np.mean(completed_episode_returns[-Args.return_window_episodes:]))
+            if completed_episode_returns else None
+        )
+        learning_curve_steps.append(global_step)
+        rollout_mean_returns.append(rollout_mean)
+        rolling_mean_returns.append(rolling_mean)
                 
         # 计算优势函数 (GAE)
         with torch.no_grad():
@@ -245,7 +299,7 @@ def train_rl():
                 v_loss = 0.5 * ((newvalue.view(-1) - b_returns[mb_inds]) ** 2).mean()
 
                 entropy_loss = entropy.mean()
-                loss = pg_loss - 0.01 * entropy_loss + v_loss * 0.5
+                loss = pg_loss - Args.entropy_coef * entropy_loss + v_loss * 0.5
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -253,26 +307,62 @@ def train_rl():
                 optimizer.step()
                 
         if update % 5 == 0:
-            eval_return = eval_policy(agent, Args.env_id)
-            print(f"Update: {update}/{num_updates}, Global Step: {global_step}, Policy Loss: {pg_loss.item():.4f}, Value Loss: {v_loss.item():.4f}, Eval Return: {eval_return:.2f}")
-            writer.add_scalar("Loss/Policy", pg_loss.item(), global_step)
-            writer.add_scalar("Loss/Value", v_loss.item(), global_step)
-            writer.add_scalar("Loss/Entropy", entropy_loss.item(), global_step)
-            writer.add_scalar("Eval/MeanReturn", eval_return, global_step)
+            print(f"Update: {update}/{num_updates}, Global Step: {global_step}, Policy Loss: {pg_loss.item():.4f}, Value Loss: {v_loss.item():.4f}, Rolling Mean Return: {rolling_mean if rolling_mean is not None else 'n/a'}")
 
-    writer.close()
+    synchronize_device(Args.device)
+    total_seconds = time.perf_counter() - training_start
+    training_seconds = max(0.0, total_seconds - sampling_seconds)
+    env.close()
     # 保存模型
     model_dir = "model"
     os.makedirs(model_dir, exist_ok=True)
-    model_path = os.path.join(model_dir, "rl_nonlinear2d.pth")
+    model_path = os.path.join(model_dir, Args.model_filename)
     torch.save(agent.state_dict(), model_path)
     print(f"RL PPO model saved to {model_path}")
+
+    curve_path = os.path.join("image", Args.curve_filename)
+    result_path = os.path.join("results", Args.result_filename)
+    save_learning_curve(curve_path, learning_curve_steps, rollout_mean_returns,
+                        rolling_mean_returns, Args.return_window_episodes)
+    record = {
+        "environment": Args.env_id,
+        "reward_mode": Args.reward_mode,
+        "seed": Args.seed,
+        "device": str(Args.device),
+        "requested_total_timesteps": Args.time_steps,
+        "actual_total_timesteps": global_step,
+        "steps_per_rollout": Args.num_steps,
+        "learning_rate": Args.learning_rate,
+        "batch_size": Args.batch_size,
+        "ppo_epochs": Args.ppo_epochs,
+        "entropy_coef": Args.entropy_coef,
+        "reward_scale_for_optimization": Args.reward_scale,
+        "data_collection_seconds": sampling_seconds,
+        "training_seconds": training_seconds,
+        "total_seconds": total_seconds,
+        "return_window_episodes": Args.return_window_episodes,
+        "learning_curve": {
+            "environment_interactions": learning_curve_steps,
+            "rollout_mean_returns": rollout_mean_returns,
+            "rolling_mean_returns": rolling_mean_returns,
+            "completed_episode_count": len(completed_episode_returns),
+        },
+        "final_stability_summary": stability_summary(
+            learning_curve_steps, rolling_mean_returns
+        ),
+        "model_file": model_path,
+        "learning_curve_file": curve_path,
+    }
+    save_training_record(result_path, record)
+    print(f"Training record saved to {result_path}")
+    print(f"Data collection: {sampling_seconds:.2f} s; training: {training_seconds:.2f} s; total: {total_seconds:.2f} s.")
+    return record
 
 
 # ================== 在网格化场景下测试值函数与画图 ==================
 def plot_value():
     model_dir = "model"
-    model_path = os.path.join(model_dir, "rl_nonlinear2d.pth")
+    model_path = os.path.join(model_dir, Args.model_filename)
     args = Args()
     env = gym.make(args.env_id)
     state_dim = env.observation_space.shape[0]
@@ -505,7 +595,7 @@ def simulate_once():
     action_dim = 1
     agent = RLNet(state_dim, action_dim).to(Args.device)
     
-    model_path = "model/" + "rl_nonlinear2d.pth"
+    model_path = os.path.join("model", Args.model_filename)
     if os.path.exists(model_path):
         agent.load_state_dict(torch.load(model_path, map_location=Args.device))
         print(f"Loaded model from {model_path}")
@@ -559,6 +649,6 @@ def simulate_once():
 if __name__ == "__main__":
     args = Args()
     # 训练模型请取消注释下面一行
-    # train_rl()
+    train_rl()
     plot_value()
-    # simulate_once()
+    simulate_once()

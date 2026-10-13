@@ -101,10 +101,9 @@ def get_pPpx(X):
     return pP1px + pP2px
 
 
-# Hamilton神经网络
 class HNN(nn.Module):
     def __init__(self, env):
-        self.env = env
+        self.env = env.unwrapped if hasattr(env, 'unwrapped') else env
         super().__init__()
 
         # 共享层

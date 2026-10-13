@@ -3,8 +3,7 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import torch
-import casadi as ca
-from acados_template import AcadosModel, AcadosOcp
+import sympy as sp
 
 
 class Quadrotor3D(gym.Env):
@@ -28,7 +27,6 @@ class Quadrotor3D(gym.Env):
         super().__init__()
 
         # 模型设置
-        self.acados_model = NonmialAcadosModel(self.metadata)
         self.system_torch_dynamics = SystemTorchDynamics(self.metadata)
         # 状态空间: [p_x, p_y, p_z, v_x, v_y, v_z, phi, theta, psi, p, q, r]
         state_low = np.array([-1.5, -1.5, -1.5, -10, -10, -10, -np.pi, -np.pi/2, -np.pi, -10, -10, -10])
@@ -45,7 +43,7 @@ class Quadrotor3D(gym.Env):
         self.state[9:12] = 0.0 # 初始角速度为0
 
         # 模型参数
-        self.A, self.B = linearize_at_origin(self.acados_model)
+        self.A, self.B = linearize_at_origin(self.metadata)
 
         # 控制参数
         control_param = options.get('control_param')
@@ -349,137 +347,90 @@ class SystemTorchDynamics(torch.nn.Module):
         ], dim=1)
         return dxdt
 
-class NonmialAcadosModel():
-    def __init__(self, metadata):
-        self.metadata = metadata
-        self.model = self.export_acados_model()
-
-    def export_acados_model(self):
-        nx = self.metadata['nx']
-        nu = self.metadata['nu']
-        m = self.metadata['m']
-        g = self.metadata['g']
-        l = self.metadata['l']
-        Ixx = self.metadata['Ixx']
-        Iyy = self.metadata['Iyy']
-        Izz = self.metadata['Izz']
-        kT = self.metadata['kT']
-        kM = self.metadata['kM']
-
-        fx = ca.SX.sym('x_dot', nx)
-        x = ca.SX.sym('x', nx)
-        u = ca.SX.sym('u', nu)
-
-        # 状态变量
-        px = x[0]
-        py = x[1]
-        pz = x[2]
-        vx = x[3]
-        vy = x[4]
-        vz = x[5]
-        phi = x[6]
-        theta = x[7]
-        psi = x[8]
-        p = x[9]
-        q = x[10]
-        r = x[11]
-
-        T1 = u[0]
-        T2 = u[1]
-        T3 = u[2]
-        T4 = u[3]
-
-        # 推力/力矩分配
-        alloc = ca.vertcat(
-            ca.horzcat(1, 1, 1, 1),
-            ca.horzcat(-l, l, l, -l),
-            ca.horzcat(-l, l, -l, l),
-            ca.horzcat(-kM/kT, -kM/kT, kM/kT, kM/kT)
-        )
-        motor_input = ca.vertcat(T1, T2, T3, T4)
-        out = alloc @ motor_input
-        T = out[0]
-        tau_x = out[1]
-        tau_y = out[2]
-        tau_z = out[3]
-
-        cphi = ca.cos(phi)
-        sphi = ca.sin(phi)
-        cth = ca.cos(theta)
-        sth = ca.sin(theta)
-        cpsi = ca.cos(psi)
-        spsi = ca.sin(psi)
-        R = ca.vertcat(
-            ca.horzcat(cth * cpsi, sphi * sth * cpsi - cphi * spsi, cphi * sth * cpsi + sphi * spsi),
-            ca.horzcat(cth * spsi, sphi * sth * spsi + cphi * cpsi, cphi * sth * spsi - sphi * cpsi),
-            ca.horzcat(-sth,       sphi * cth,                      cphi * cth)
-        )
-
-        # 位置微分
-        dpos = ca.vertcat(vx, vy, vz)
-        # 速度微分
-        dv = (1.0 / m) * (R @ ca.vertcat(0, 0, T)) - ca.vertcat(0, 0, g)
-
-        # 欧拉角微分
-        tan_theta = ca.tan(theta)
-        sec_theta = 1.0 / ca.cos(theta)
-        euler_dot = ca.vertcat(
-            p + sphi * tan_theta * q + cphi * tan_theta * r,
-            cphi * q - sphi * r,
-            sphi * sec_theta * q + cphi * sec_theta * r
-        )
-
-        # 角速度微分
-        p_dot = (1.0 / Ixx) * (tau_x + q * r * (Iyy - Izz))
-        q_dot = (1.0 / Iyy) * (tau_y + p * r * (Izz - Ixx))
-        r_dot = (1.0 / Izz) * (tau_z + p * q * (Ixx - Iyy))
-
-        x_dot = ca.vertcat(
-            dpos,
-            dv,
-            euler_dot,
-            p_dot,
-            q_dot,
-            r_dot
-        )
-
-        model = AcadosModel()
-        model.f_expl_expr = x_dot
-        model.f_impl_expr = fx - x_dot
-        model.x_dot = fx
-        model.x = x
-        model.u = u
-        model.p = []
-        model.name = "quadrotor3d"
-
-        return model
-
-
-def linearize_at_origin(acados_model):
+def linearize_at_origin(metadata):
     """
-    计算动力学模型在零点（x=0, u=0）的线性化矩阵A和B
-    :param model: AcadosModel对象
+    计算动力学模型在悬停平衡点（x=0, u_i=mg/4）的线性化矩阵A和B (使用 SymPy 计算)
+    :param metadata: 环境参数字典
     :return: 数值矩阵A, B
     """
-    model = acados_model.model
-    # 提取符号变量和表达式
-    x = model.x
-    u = model.u
-    f_expl = model.f_expl_expr  # 显式动力学: dx/dt = f_expl(x, u)
+    m = metadata['m']
+    g = metadata['g']
+    l = metadata['l']
+    Ixx = metadata['Ixx']
+    Iyy = metadata['Iyy']
+    Izz = metadata['Izz']
+    kT = metadata['kT']
+    kM = metadata['kM']
 
-    # 计算雅可比矩阵 (符号形式)
-    A_sym = ca.jacobian(f_expl, x)  # A = df/dx
-    B_sym = ca.jacobian(f_expl, u)  # B = df/du
+    px, py, pz, vx, vy, vz, phi, theta, psi, p, q, r = sp.symbols(
+        'px py pz vx vy vz phi theta psi p q r'
+    )
+    T1, T2, T3, T4 = sp.symbols('T1 T2 T3 T4')
 
-    # 创建函数用于数值计算
-    A_func = ca.Function('A_func', [x, u], [A_sym])
-    B_func = ca.Function('B_func', [x, u], [B_sym])
+    x = sp.Matrix([px, py, pz, vx, vy, vz, phi, theta, psi, p, q, r])
+    u = sp.Matrix([T1, T2, T3, T4])
 
-    # 在零点求值 (x=0, u=0)
-    x0 = np.zeros(model.x.size()[0])
-    u0 = np.ones(model.u.size()[0]) * 0.25 * acados_model.metadata['m'] * acados_model.metadata['g']
-    A0 = A_func(x0, u0).full()  # 转换为NumPy数组
-    B0 = B_func(x0, u0).full()
+    alloc = sp.Matrix([
+        [1, 1, 1, 1],
+        [-l, l, l, -l],
+        [-l, l, -l, l],
+        [-kM / kT, -kM / kT, kM / kT, kM / kT]
+    ])
+    thrust_torque = alloc * u
+    T_total = thrust_torque[0]
+    tau_x = thrust_torque[1]
+    tau_y = thrust_torque[2]
+    tau_z = thrust_torque[3]
+
+    cphi = sp.cos(phi)
+    sphi = sp.sin(phi)
+    cth = sp.cos(theta)
+    sth = sp.sin(theta)
+    cpsi = sp.cos(psi)
+    spsi = sp.sin(psi)
+
+    R = sp.Matrix([
+        [cth * cpsi, sphi * sth * cpsi - cphi * spsi, cphi * sth * cpsi + sphi * spsi],
+        [cth * spsi, sphi * sth * spsi + cphi * cpsi, cphi * sth * spsi - sphi * cpsi],
+        [-sth,       sphi * cth,                      cphi * cth]
+    ])
+
+    dpos = sp.Matrix([vx, vy, vz])
+    dv = (1.0 / m) * (R * sp.Matrix([0, 0, T_total])) - sp.Matrix([0, 0, g])
+
+    tan_theta = sp.tan(theta)
+    sec_theta = 1.0 / sp.cos(theta)
+    euler_dot = sp.Matrix([
+        p + sphi * tan_theta * q + cphi * tan_theta * r,
+        cphi * q - sphi * r,
+        sphi * sec_theta * q + cphi * sec_theta * r
+    ])
+
+    p_dot = (1.0 / Ixx) * (tau_x + q * r * (Iyy - Izz))
+    q_dot = (1.0 / Iyy) * (tau_y + p * r * (Izz - Ixx))
+    r_dot = (1.0 / Izz) * (tau_z + p * q * (Ixx - Iyy))
+
+    f = sp.Matrix([
+        dpos[0], dpos[1], dpos[2],
+        dv[0], dv[1], dv[2],
+        euler_dot[0], euler_dot[1], euler_dot[2],
+        p_dot, q_dot, r_dot
+    ])
+
+    A_sym = f.jacobian(x)
+    B_sym = f.jacobian(u)
+
+    u0_val = 0.25 * m * g
+    subs_dict = {
+        px: 0.0, py: 0.0, pz: 0.0,
+        vx: 0.0, vy: 0.0, vz: 0.0,
+        phi: 0.0, theta: 0.0, psi: 0.0,
+        p: 0.0, q: 0.0, r: 0.0,
+        T1: u0_val, T2: u0_val, T3: u0_val, T4: u0_val
+    }
+
+    A0 = np.array(A_sym.subs(subs_dict), dtype=np.float64)
+    B0 = np.array(B_sym.subs(subs_dict), dtype=np.float64)
 
     return A0, B0
 

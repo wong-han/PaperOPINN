@@ -48,7 +48,7 @@ class Args:
     # 总训练次数
     time_steps = 20000
     # 训练批次
-    batch_size = 1280
+    batch_size = 2048
     # 是否使用GPU
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # 文件名前缀
@@ -82,10 +82,9 @@ def get_pfpu(X):
     return B
 
 
-# Hamilton神经网络
 class HNN(nn.Module):
     def __init__(self, env):
-        self.env = env
+        self.env = env.unwrapped if hasattr(env, 'unwrapped') else env
         super().__init__()
 
         # 共享层
@@ -455,6 +454,7 @@ def train_hnn():
 
 
 def plot_value():
+    os.makedirs("image", exist_ok=True)
     # 加载模型参数
     model_dir = "model"
     model_path = os.path.join(model_dir, "hnn_linear2d.pth")
@@ -762,6 +762,6 @@ def simulate_once():
 
 if __name__ == "__main__":
     args = Args()
-    # train_hnn()
+    train_hnn()
     plot_value()
     # simulate_once()

@@ -3,12 +3,11 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import torch
-import casadi as ca
-from acados_template import AcadosModel, AcadosOcp
 
 
 class Nonlinear2D(gym.Env):
     metadata = {}
+    metadata['render_modes'] = []
     metadata['nx'] = 2
     metadata['nu'] = 1
     metadata['a1'] = 0.0
@@ -20,17 +19,16 @@ class Nonlinear2D(gym.Env):
     metadata['Q'] = np.diag([1, 1])
     metadata['R'] = np.diag([1])
 
-    def __init__(self, options={}, theoretic_mode=False, rl_mode=False):
+    def __init__(self, options={}, theoretic_mode=False, rl_mode=True):
         super().__init__()
         
         # 模型设置
-        self.acados_model = NonmialAcadosModel(self.metadata)
         self.system_torch_dynamics = SystemTorchDynamics(self.metadata)
         self.observation_space = spaces.Box(low=-10.0, high=10.0, shape=(self.metadata['nx'],), dtype=np.float64)
         self.action_space = spaces.Box(low=-10, high=10, shape=(self.metadata['nu'],), dtype=np.float64)
 
-        # 在observation_space范围内随机生成一个状态
-        self.state = 0.6 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
+        # Default initial state; reset() uses the same [-4, 4] range.
+        self.state = self.np_random.uniform(-4.0, 4.0, size=self.metadata['nx'])
 
         # 模型参数（线性参数不再使用，保留兼容）
         model_param = options.get('model_param')
@@ -95,7 +93,11 @@ class Nonlinear2D(gym.Env):
         info['data'] = deepcopy(self.data)
         return info
 
-    def reset(self, seed=None, options={}, rl_mode=False):
+    def reset(self, seed=None, options={}, rl_mode=True):
+        # Gymnasium wrappers only forward standard reset arguments.  Accepting
+        # rl_mode through options keeps the custom mode compatible with them.
+        if options is not None and 'rl_mode' in options:
+            rl_mode = bool(options['rl_mode'])
         self.rl_mode = rl_mode
         super().reset(seed=seed)
 
@@ -107,10 +109,11 @@ class Nonlinear2D(gym.Env):
         if init_state is not None:
             self.state = init_state
         else:
-            if self.rl_mode:
-                self.state = 0.4 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
-            else:
-                self.state = 0.3 * self.np_random.uniform(self.observation_space.low, self.observation_space.high)
+            # Preserve the initial-state distribution used by the successful
+            # RL run, independently of the compatibility flag.
+            self.state = self.np_random.uniform(
+                -4.0, 4.0, size=self.metadata['nx']
+            )
 
         self.t = 0.0
         self.data = {}
@@ -265,39 +268,3 @@ class SystemTorchDynamics(torch.nn.Module):
         dx1 = -x1 + x2
         dx2 = -0.5 * x1 - 0.5 * x2 * (1.0 - c**2) + c * u_scalar
         return torch.stack([dx1, dx2], dim=1)
-        
-class NonmialAcadosModel():
-    def __init__(self, metadata):
-        self.metadata = metadata
-        self.model = self.export_acados_model()
-
-    def export_acados_model(self):
-        nx = self.metadata['nx']
-        nu = self.metadata['nu']
-
-        fx = ca.SX.sym('x_dot', nx)
-        x = ca.SX.sym('x', nx)
-        u = ca.SX.sym('u', nu)
-        
-        # 非线性动力学
-        x1 = x[0]
-        x2 = x[1]
-        c = ca.cos(2 * x1) + 2
-        dx1 = -x1 + x2
-        dx2 = -0.5 * x1 - 0.5 * x2 * (1 - c**2) + c * u[0]
-        x_dot = ca.vertcat(dx1, dx2)
-
-        model = AcadosModel()
-        model.f_expl_expr = x_dot
-        model.f_impl_expr = fx - x_dot
-        model.x_dot = fx
-        model.x = x
-        model.u = u
-        model.p = []
-        model.name = "nonlinear_2d"
-
-        return model
-
-
-
-
